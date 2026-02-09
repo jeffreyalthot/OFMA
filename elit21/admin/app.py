@@ -214,6 +214,7 @@ class AdminApp:
         self.inventory_color = StringVar()
         self.inventory_size = StringVar()
         self.inventory_quantity = StringVar()
+        self.inventory_status = StringVar()
         self.inventory_products: dict[str, int] = {}
 
         ttk.Label(form_frame, text="Article").pack(anchor="w")
@@ -246,20 +247,35 @@ class AdminApp:
         ttk.Label(form_frame, text="Quantité").pack(anchor="w", pady=(10, 0))
         ttk.Entry(form_frame, textvariable=self.inventory_quantity, width=12).pack(anchor="w")
 
+        ttk.Label(form_frame, text="Statut").pack(anchor="w", pady=(10, 0))
+        ttk.Combobox(
+            form_frame,
+            textvariable=self.inventory_status,
+            values=["pending", "active", "inactive"],
+            state="readonly",
+            width=18,
+        ).pack(anchor="w")
+
         ttk.Button(
             form_frame,
             text="Mettre à jour inventaire",
             command=self.update_inventory,
         ).pack(anchor="w", pady=15)
 
+        ttk.Button(
+            form_frame,
+            text="Mettre à jour statut",
+            command=self.update_product_status,
+        ).pack(anchor="w", pady=(0, 15))
+
         list_frame = ttk.Labelframe(container, text="Inventaire par variante", padding=15)
         list_frame.pack(side="left", fill="both", expand=True)
 
-        columns = ("article", "couleur", "taille", "quantite")
+        columns = ("article", "statut", "couleur", "taille", "quantite")
         self.inventory_tree = ttk.Treeview(list_frame, columns=columns, show="headings")
         for col in columns:
             self.inventory_tree.heading(col, text=col.capitalize())
-            self.inventory_tree.column(col, width=150)
+            self.inventory_tree.column(col, width=130)
         self.inventory_tree.pack(side="left", fill="both", expand=True)
 
         scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.inventory_tree.yview)
@@ -297,14 +313,14 @@ class AdminApp:
             address_frame,
             text="Adresse indisponible",
             justify="left",
-            wraplength=260,
+            wraplength=320,
         )
         self.order_address_label.pack(anchor="w")
 
         items_frame = ttk.Labelframe(detail_frame, text="Articles commandés", padding=10)
-        items_frame.pack(fill="both", expand=True, pady=10)
+        items_frame.pack(fill="x", side="bottom", pady=(10, 0))
         item_columns = ("article", "quantite", "prix")
-        self.order_items_tree = ttk.Treeview(items_frame, columns=item_columns, show="headings", height=6)
+        self.order_items_tree = ttk.Treeview(items_frame, columns=item_columns, show="headings", height=4)
         self.order_items_tree.heading("article", text="Article")
         self.order_items_tree.heading("quantite", text="Qté")
         self.order_items_tree.heading("prix", text="Prix")
@@ -566,10 +582,10 @@ class AdminApp:
         products = conn.execute("SELECT id, name FROM products ORDER BY name").fetchall()
         inventory = conn.execute(
             """
-            SELECT p.name AS product_name, i.color, i.size, i.quantity
+            SELECT p.name AS product_name, p.status, i.color, i.size, i.quantity
             FROM product_inventory i
             JOIN products p ON p.id = i.product_id
-            ORDER BY p.name, i.color, i.size
+            ORDER BY p.name, p.status, i.color, i.size
             """
         ).fetchall()
         conn.close()
@@ -581,7 +597,13 @@ class AdminApp:
             self.inventory_tree.insert(
                 "",
                 "end",
-                values=(row["product_name"], row["color"], row["size"], row["quantity"]),
+                values=(
+                    row["product_name"],
+                    row["status"],
+                    row["color"],
+                    row["size"],
+                    row["quantity"],
+                ),
             )
 
     def update_inventory(self) -> None:
@@ -627,6 +649,25 @@ class AdminApp:
         self.refresh_products()
         self.refresh_inventory()
         messagebox.showinfo("Succès", "Inventaire mis à jour.")
+
+    def update_product_status(self) -> None:
+        product_name = self.inventory_product.get().strip()
+        status = self.inventory_status.get().strip()
+        if not product_name or not status:
+            messagebox.showerror("Erreur", "Sélectionnez un article et un statut.")
+            return
+        product_id = self.inventory_products.get(product_name)
+        if not product_id:
+            messagebox.showerror("Erreur", "Article introuvable.")
+            return
+        conn = get_connection()
+        conn.execute("UPDATE products SET status = ? WHERE id = ?", (status, product_id))
+        conn.commit()
+        conn.close()
+        self.inventory_status.set("")
+        self.refresh_products()
+        self.refresh_inventory()
+        messagebox.showinfo("Succès", "Statut mis à jour.")
 
     def refresh_orders(self) -> None:
         for item in self.orders_tree.get_children():
@@ -707,8 +748,31 @@ class AdminApp:
             f"Livraison: € {order['shipping_fee']:.2f}\n"
             f"Total TTC: € {order['total']:.2f}"
         )
-        self.order_address_label.config(text=order["customer_address"])
+        self.order_address_label.config(text=self.format_customer_address(order))
         self.order_detail_label.config(text=detail)
+
+    def format_customer_address(self, order) -> str:
+        name = str(order["customer_name"] or "").strip()
+        raw_address = str(order["customer_address"] or "").strip()
+        if not raw_address:
+            return "Adresse indisponible"
+        lines = [line.strip() for line in raw_address.replace("\r", "\n").split("\n") if line.strip()]
+        if len(lines) == 1:
+            parts = [part.strip() for part in lines[0].split(",") if part.strip()]
+        else:
+            parts = lines
+        address_lines = []
+        if name:
+            address_lines.append(name)
+        if parts:
+            address_lines.append(parts[0])
+        if len(parts) > 1:
+            address_lines.append(parts[1])
+        if len(parts) > 2:
+            address_lines.append(parts[2])
+        if len(parts) > 3:
+            address_lines.append(", ".join(parts[3:]))
+        return "\n".join(address_lines) if address_lines else "Adresse indisponible"
 
     def update_order_status(self, status: str) -> None:
         selected = self.orders_tree.selection()
