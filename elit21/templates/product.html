@@ -8,6 +8,9 @@
     <div class="price">€ {{ '%.2f'|format(product['price']) }}</div>
     <p><strong>Stock:</strong> {{ product['stock'] }}</p>
     <p class="badge">Paiement sécurisé via PayPal</p>
+    <form class="cart-add" method="post" action="{{ url_for('add_to_cart', product_id=product['id']) }}">
+      <button type="submit">Ajouter au panier</button>
+    </form>
   </div>
   <div class="product-gallery">
     {% if images %}

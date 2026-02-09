@@ -63,11 +63,17 @@ def init_db():
             customer_address TEXT NOT NULL,
             status TEXT NOT NULL,
             payment_status TEXT NOT NULL,
+            shipping_fee REAL NOT NULL DEFAULT 0,
             total REAL NOT NULL,
             created_at TEXT NOT NULL
         )
         """
     )
+
+    cursor.execute("PRAGMA table_info(orders)")
+    columns = {row[1] for row in cursor.fetchall()}
+    if "shipping_fee" not in columns:
+        cursor.execute("ALTER TABLE orders ADD COLUMN shipping_fee REAL NOT NULL DEFAULT 0")
 
     cursor.execute(
         """
