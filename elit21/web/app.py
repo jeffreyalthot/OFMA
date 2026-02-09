@@ -265,9 +265,10 @@ def create_app():
     @app.route("/checkout/place-order", methods=["POST"])
     @login_required
     def place_order():
+        customer_name = request.form.get("customer_name", "").strip()
         address = request.form.get("address", "").strip()
-        if not address:
-            flash("Veuillez renseigner une adresse de livraison.")
+        if not customer_name or not address:
+            flash("Veuillez renseigner votre nom et une adresse de livraison.")
             return redirect(url_for("checkout"))
         items, subtotal = load_cart_items()
         if not items:
@@ -276,7 +277,7 @@ def create_app():
         total = subtotal + SHIPPING_FEE
         conn = get_connection()
         user = conn.execute(
-            "SELECT full_name, email FROM users WHERE id = ?",
+            "SELECT email FROM users WHERE id = ?",
             (session.get("user_id"),),
         ).fetchone()
         if not user:
@@ -298,7 +299,7 @@ def create_app():
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                user["full_name"],
+                customer_name,
                 user["email"],
                 address,
                 "pending",

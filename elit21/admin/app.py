@@ -422,7 +422,7 @@ class AdminApp:
         detail = (
             f"Client: {order['customer_name']}\n"
             f"Email: {order['customer_email']}\n"
-            f"Adresse: {order['customer_address']}\n"
+            f"Adresse complète: {order['customer_address']}\n"
             f"Date achat: {order['created_at']}\n"
             f"Statut: {order['status']}\n"
             f"Paiement: {order['payment_status']}\n"
