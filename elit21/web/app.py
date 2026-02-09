@@ -20,6 +20,7 @@ from elit21.db import get_connection, init_db
 
 PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID", "demo-client-id")
 PAYPAL_ENV = os.getenv("PAYPAL_ENV", "sandbox")
+SHIPPING_FEE = float(os.getenv("SHIPPING_FEE", "9.99"))
 
 
 def create_app():
@@ -31,6 +32,50 @@ def create_app():
     app.secret_key = os.getenv("ELIT21_SECRET", "elit21-secret")
 
     init_db()
+
+    def get_cart() -> dict[str, int]:
+        cart = session.get("cart")
+        if cart is None or not isinstance(cart, dict):
+            cart = {}
+            session["cart"] = cart
+        return cart
+
+    def cart_count() -> int:
+        return sum(get_cart().values())
+
+    def load_cart_items():
+        cart = get_cart()
+        if not cart:
+            return [], 0.0
+        product_ids = [int(pid) for pid in cart.keys()]
+        placeholders = ",".join("?" for _ in product_ids)
+        conn = get_connection()
+        products = conn.execute(
+            f"SELECT * FROM products WHERE id IN ({placeholders})",
+            product_ids,
+        ).fetchall()
+        conn.close()
+        items = []
+        subtotal = 0.0
+        products_map = {str(product["id"]): product for product in products}
+        for product_id, quantity in cart.items():
+            product = products_map.get(product_id)
+            if not product:
+                continue
+            line_total = product["price"] * quantity
+            subtotal += line_total
+            items.append(
+                {
+                    "product": product,
+                    "quantity": quantity,
+                    "line_total": line_total,
+                }
+            )
+        return items, subtotal
+
+    @app.context_processor
+    def inject_cart_metrics():
+        return {"cart_count": cart_count()}
 
     def login_required(view_func):
         @wraps(view_func)
@@ -81,6 +126,60 @@ def create_app():
             flash("Article introuvable.")
             return redirect(url_for("index"))
         return render_template("product.html", product=product, images=images)
+
+    @app.route("/cart")
+    def cart():
+        items, subtotal = load_cart_items()
+        total = subtotal + (SHIPPING_FEE if items else 0.0)
+        return render_template(
+            "cart.html",
+            items=items,
+            subtotal=subtotal,
+            shipping_fee=SHIPPING_FEE,
+            total=total,
+        )
+
+    @app.route("/cart/add/<int:product_id>", methods=["POST"])
+    def add_to_cart(product_id: int):
+        conn = get_connection()
+        product = conn.execute(
+            "SELECT id, status, stock FROM products WHERE id = ?",
+            (product_id,),
+        ).fetchone()
+        conn.close()
+        if not product or product["status"] != "active":
+            flash("Article indisponible.")
+            return redirect(url_for("index"))
+        if product["stock"] <= 0:
+            flash("Article en rupture de stock.")
+            return redirect(url_for("product_detail", product_id=product_id))
+        cart = get_cart()
+        cart[str(product_id)] = cart.get(str(product_id), 0) + 1
+        session["cart"] = cart
+        flash("Article ajouté au panier.")
+        return redirect(url_for("cart"))
+
+    @app.route("/cart/update/<int:product_id>", methods=["POST"])
+    def update_cart_item(product_id: int):
+        quantity_str = request.form.get("quantity", "").strip()
+        if not quantity_str.isdigit():
+            flash("Quantité invalide.")
+            return redirect(url_for("cart"))
+        quantity = int(quantity_str)
+        cart = get_cart()
+        if quantity <= 0:
+            cart.pop(str(product_id), None)
+        else:
+            cart[str(product_id)] = quantity
+        session["cart"] = cart
+        return redirect(url_for("cart"))
+
+    @app.route("/cart/remove/<int:product_id>", methods=["POST"])
+    def remove_cart_item(product_id: int):
+        cart = get_cart()
+        cart.pop(str(product_id), None)
+        session["cart"] = cart
+        return redirect(url_for("cart"))
 
     @app.route("/product/<int:product_id>/image/<int:image_id>")
     def product_image(product_id: int, image_id: int):
@@ -148,11 +247,87 @@ def create_app():
     @app.route("/checkout")
     @login_required
     def checkout():
+        items, subtotal = load_cart_items()
+        if not items:
+            flash("Votre panier est vide.")
+            return redirect(url_for("cart"))
+        total = subtotal + SHIPPING_FEE
         return render_template(
             "checkout.html",
             paypal_client_id=PAYPAL_CLIENT_ID,
             paypal_env=PAYPAL_ENV,
+            items=items,
+            subtotal=subtotal,
+            shipping_fee=SHIPPING_FEE,
+            total=total,
         )
+
+    @app.route("/checkout/place-order", methods=["POST"])
+    @login_required
+    def place_order():
+        address = request.form.get("address", "").strip()
+        if not address:
+            flash("Veuillez renseigner une adresse de livraison.")
+            return redirect(url_for("checkout"))
+        items, subtotal = load_cart_items()
+        if not items:
+            flash("Votre panier est vide.")
+            return redirect(url_for("cart"))
+        total = subtotal + SHIPPING_FEE
+        conn = get_connection()
+        user = conn.execute(
+            "SELECT full_name, email FROM users WHERE id = ?",
+            (session.get("user_id"),),
+        ).fetchone()
+        if not user:
+            conn.close()
+            flash("Compte utilisateur introuvable.")
+            return redirect(url_for("checkout"))
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO orders (
+                customer_name,
+                customer_email,
+                customer_address,
+                status,
+                payment_status,
+                shipping_fee,
+                total,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user["full_name"],
+                user["email"],
+                address,
+                "pending",
+                "pending",
+                SHIPPING_FEE,
+                total,
+                datetime.utcnow().isoformat(),
+            ),
+        )
+        order_id = cursor.lastrowid
+        for item in items:
+            product = item["product"]
+            cursor.execute(
+                """
+                INSERT INTO order_items (order_id, product_id, product_name, quantity, price)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    order_id,
+                    product["id"],
+                    product["name"],
+                    item["quantity"],
+                    product["price"],
+                ),
+            )
+        conn.commit()
+        conn.close()
+        flash("Commande enregistrée. Procédez au paiement PayPal.")
+        return redirect(url_for("checkout"))
 
     return app
 

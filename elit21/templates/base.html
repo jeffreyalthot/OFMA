@@ -12,6 +12,7 @@
       <div class="logo">ELIT21</div>
       <div>
         <a href="{{ url_for('index') }}">Market</a>
+        <a href="{{ url_for('cart') }}">Panier ({{ cart_count }})</a>
         {% if session.get('user_id') %}
         <a href="{{ url_for('checkout') }}">Checkout</a>
         <a href="{{ url_for('logout') }}">Déconnexion</a>

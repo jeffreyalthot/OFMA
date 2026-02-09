@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="section-title">Votre panier</h2>
+
+{% if items %}
+  <div class="cart-grid">
+    <div class="cart-items">
+      {% for item in items %}
+        <div class="cart-item">
+          <div>
+            <h3>{{ item.product['name'] }}</h3>
+            <p class="muted">{{ item.product['description'][:100] }}{% if item.product['description']|length > 100 %}...{% endif %}</p>
+            <p class="price">€ {{ '%.2f'|format(item.product['price']) }}</p>
+          </div>
+          <div class="cart-actions">
+            <form method="post" action="{{ url_for('update_cart_item', product_id=item.product['id']) }}">
+              <input type="number" min="1" name="quantity" value="{{ item.quantity }}" />
+              <button type="submit">Mettre à jour</button>
+            </form>
+            <form method="post" action="{{ url_for('remove_cart_item', product_id=item.product['id']) }}">
+              <button class="text-button" type="submit">Retirer</button>
+            </form>
+          </div>
+          <div class="cart-line-total">
+            € {{ '%.2f'|format(item.line_total) }}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    <div class="cart-summary">
+      <h3>Facture client</h3>
+      <div class="summary-row">
+        <span>Sous-total</span>
+        <span>€ {{ '%.2f'|format(subtotal) }}</span>
+      </div>
+      <div class="summary-row">
+        <span>Livraison</span>
+        <span>€ {{ '%.2f'|format(shipping_fee) }}</span>
+      </div>
+      <div class="summary-row total">
+        <span>Total TTC</span>
+        <span>€ {{ '%.2f'|format(total) }}</span>
+      </div>
+      <a class="cta" href="{{ url_for('checkout') }}">Passer au paiement</a>
+    </div>
+  </div>
+{% else %}
+  <div class="auth-container">
+    <p>Votre panier est vide.</p>
+    <a class="cta" href="{{ url_for('index') }}">Retour au market</a>
+  </div>
+{% endif %}
+{% endblock %}

@@ -162,6 +162,21 @@ class AdminApp:
         self.order_detail_label = ttk.Label(detail_frame, text="Sélectionnez une commande")
         self.order_detail_label.pack(anchor="w")
 
+        items_frame = ttk.Labelframe(detail_frame, text="Articles commandés", padding=10)
+        items_frame.pack(fill="both", expand=True, pady=10)
+        item_columns = ("article", "quantite", "prix")
+        self.order_items_tree = ttk.Treeview(items_frame, columns=item_columns, show="headings", height=6)
+        self.order_items_tree.heading("article", text="Article")
+        self.order_items_tree.heading("quantite", text="Qté")
+        self.order_items_tree.heading("prix", text="Prix")
+        self.order_items_tree.column("article", width=180)
+        self.order_items_tree.column("quantite", width=60)
+        self.order_items_tree.column("prix", width=80)
+        self.order_items_tree.pack(side="left", fill="both", expand=True)
+        items_scrollbar = ttk.Scrollbar(items_frame, orient="vertical", command=self.order_items_tree.yview)
+        items_scrollbar.pack(side="right", fill="y")
+        self.order_items_tree.configure(yscrollcommand=items_scrollbar.set)
+
         ttk.Button(detail_frame, text="Marquer en traitement", command=lambda: self.update_order_status("processing")).pack(
             fill="x", pady=5
         )
@@ -392,19 +407,27 @@ class AdminApp:
 
         if not order:
             return
-
-        items_text = "\n".join(
-            f"- {item['product_name']} x{item['quantity']} (€ {item['price']:.2f})"
-            for item in items
-        )
+        for row in self.order_items_tree.get_children():
+            self.order_items_tree.delete(row)
+        for item in items:
+            self.order_items_tree.insert(
+                "",
+                "end",
+                values=(
+                    item["product_name"],
+                    item["quantity"],
+                    f"€ {item['price']:.2f}",
+                ),
+            )
         detail = (
             f"Client: {order['customer_name']}\n"
             f"Email: {order['customer_email']}\n"
             f"Adresse: {order['customer_address']}\n"
             f"Date achat: {order['created_at']}\n"
             f"Statut: {order['status']}\n"
-            f"Paiement: {order['payment_status']}\n\n"
-            f"Articles:\n{items_text if items_text else 'Aucun article'}"
+            f"Paiement: {order['payment_status']}\n"
+            f"Livraison: € {order['shipping_fee']:.2f}\n"
+            f"Total TTC: € {order['total']:.2f}"
         )
         self.order_detail_label.config(text=detail)
 

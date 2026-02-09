@@ -1,10 +1,67 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="auth-container">
-  <h2>Checkout sécurisé</h2>
-  <p>Le module de paiement PayPal est prêt à être connecté via l'API.</p>
-  <div class="badge">Client PayPal: {{ paypal_client_id if paypal_client_id else 'Configurer' }}</div>
-  <p>Une fois intégré, les transactions seront enregistrées automatiquement.</p>
+<div class="checkout-grid">
+  <div class="checkout-form">
+    <h2>Checkout sécurisé</h2>
+    <p>Finalisez votre commande avec le module PayPal intégré.</p>
+    <div class="badge">Client PayPal: {{ paypal_client_id if paypal_client_id else 'Configurer' }}</div>
+
+    <form method="post" action="{{ url_for('place_order') }}" class="order-form">
+      <label for="address">Adresse de livraison</label>
+      <input id="address" name="address" placeholder="Adresse complète du client" required />
+      <button type="submit">Créer la commande</button>
+    </form>
+
+    <div id="paypal-button-container" class="paypal-box"></div>
+    <p class="muted">Le bouton PayPal utilise les clés API configurées dans votre fichier .env.</p>
+  </div>
+
+  <div class="checkout-summary">
+    <h3>Facture client</h3>
+    <ul>
+      {% for item in items %}
+        <li>
+          {{ item.product['name'] }} x{{ item.quantity }}
+          <span>€ {{ '%.2f'|format(item.line_total) }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+    <div class="summary-row">
+      <span>Sous-total</span>
+      <span>€ {{ '%.2f'|format(subtotal) }}</span>
+    </div>
+    <div class="summary-row">
+      <span>Livraison</span>
+      <span>€ {{ '%.2f'|format(shipping_fee) }}</span>
+    </div>
+    <div class="summary-row total">
+      <span>Total TTC</span>
+      <span>€ {{ '%.2f'|format(total) }}</span>
+    </div>
+  </div>
 </div>
+
+<script src="https://www.paypal.com/sdk/js?client-id={{ paypal_client_id }}&currency=EUR&intent=capture"></script>
+<script>
+  if (window.paypal) {
+    paypal.Buttons({
+      style: { shape: 'pill', color: 'gold', layout: 'vertical', label: 'paypal' },
+      createOrder: function(data, actions) {
+        return actions.order.create({
+          purchase_units: [{
+            amount: {
+              value: '{{ '%.2f'|format(total) }}'
+            }
+          }]
+        });
+      },
+      onApprove: function(data, actions) {
+        return actions.order.capture().then(function() {
+          window.location.href = "{{ url_for('checkout') }}";
+        });
+      }
+    }).render('#paypal-button-container');
+  }
+</script>
 {% endblock %}
