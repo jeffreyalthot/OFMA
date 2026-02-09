@@ -22,6 +22,35 @@ from elit21.db import get_connection, init_db
 
 
 MAX_IMAGES = 8
+COLOR_OPTIONS = [
+    "",
+    "Noir",
+    "Blanc",
+    "Rouge",
+    "Bleu",
+    "Vert",
+    "Jaune",
+    "Orange",
+    "Rose",
+    "Violet",
+    "Gris",
+    "Marron",
+    "Beige",
+    "Marine",
+    "Turquoise",
+]
+SIZE_OPTIONS = ["", "S", "M", "L", "XL", "XXL"]
+CATEGORY_OPTIONS = [
+    "",
+    "Chapeaux",
+    "Chandails",
+    "Vestes",
+    "Polars",
+    "Pantalons",
+    "Gants",
+    "Souliers",
+    "Chaussettes",
+]
 
 
 class AdminApp:
@@ -40,16 +69,19 @@ class AdminApp:
 
         self.dashboard_tab = ttk.Frame(notebook)
         self.products_tab = ttk.Frame(notebook)
+        self.inventory_tab = ttk.Frame(notebook)
         self.orders_tab = ttk.Frame(notebook)
         self.transactions_tab = ttk.Frame(notebook)
 
         notebook.add(self.dashboard_tab, text="Dashboard Finance")
         notebook.add(self.products_tab, text="Gestion Articles")
+        notebook.add(self.inventory_tab, text="Gestion Inventaire")
         notebook.add(self.orders_tab, text="Gestion Commandes")
         notebook.add(self.transactions_tab, text="Transactions Complétées")
 
         self._build_dashboard()
         self._build_products_tab()
+        self._build_inventory_tab()
         self._build_orders_tab()
         self._build_transactions_tab()
 
@@ -77,13 +109,17 @@ class AdminApp:
         container = ttk.Frame(self.products_tab, padding=20)
         container.pack(fill="both", expand=True)
 
-        form_frame = ttk.Labelframe(container, text="Ajouter un article", padding=15)
+        form_frame = ttk.Labelframe(container, text="Ajouter/Gérer un article", padding=15)
         form_frame.pack(side="left", fill="y", padx=10)
 
+        self.editing_product_id: int | None = None
         self.product_name = StringVar()
         self.product_price = StringVar()
         self.product_stock = StringVar()
         self.product_status = StringVar(value="pending")
+        self.product_color = StringVar()
+        self.product_size = StringVar()
+        self.product_category = StringVar()
 
         ttk.Label(form_frame, text="Nom").pack(anchor="w")
         ttk.Entry(form_frame, textvariable=self.product_name, width=35).pack(anchor="w")
@@ -97,6 +133,33 @@ class AdminApp:
 
         ttk.Label(form_frame, text="Stock").pack(anchor="w", pady=(10, 0))
         ttk.Entry(form_frame, textvariable=self.product_stock, width=20).pack(anchor="w")
+
+        ttk.Label(form_frame, text="Couleur").pack(anchor="w", pady=(10, 0))
+        ttk.Combobox(
+            form_frame,
+            textvariable=self.product_color,
+            values=COLOR_OPTIONS,
+            state="readonly",
+            width=18,
+        ).pack(anchor="w")
+
+        ttk.Label(form_frame, text="Taille").pack(anchor="w", pady=(10, 0))
+        ttk.Combobox(
+            form_frame,
+            textvariable=self.product_size,
+            values=SIZE_OPTIONS,
+            state="readonly",
+            width=18,
+        ).pack(anchor="w")
+
+        ttk.Label(form_frame, text="Catégorie").pack(anchor="w", pady=(10, 0))
+        ttk.Combobox(
+            form_frame,
+            textvariable=self.product_category,
+            values=CATEGORY_OPTIONS,
+            state="readonly",
+            width=18,
+        ).pack(anchor="w")
 
         ttk.Label(form_frame, text="Statut").pack(anchor="w", pady=(10, 0))
         ttk.Combobox(
@@ -114,7 +177,10 @@ class AdminApp:
         self.images_label.pack(anchor="w")
 
         ttk.Button(form_frame, text="Enregistrer", command=self.save_product).pack(
-            anchor="w", pady=15
+            anchor="w", pady=10
+        )
+        ttk.Button(form_frame, text="Nouveau", command=self.reset_product_form).pack(
+            anchor="w", pady=(0, 15)
         )
 
         list_frame = ttk.Labelframe(container, text="Articles", padding=15)
@@ -136,6 +202,69 @@ class AdminApp:
         preview_frame.pack(side="left", fill="y", padx=10)
         self.preview_label = Label(preview_frame, text="Aucune image")
         self.preview_label.pack()
+
+    def _build_inventory_tab(self) -> None:
+        container = ttk.Frame(self.inventory_tab, padding=20)
+        container.pack(fill="both", expand=True)
+
+        form_frame = ttk.Labelframe(container, text="Mise à jour inventaire", padding=15)
+        form_frame.pack(side="left", fill="y", padx=10)
+
+        self.inventory_product = StringVar()
+        self.inventory_color = StringVar()
+        self.inventory_size = StringVar()
+        self.inventory_quantity = StringVar()
+        self.inventory_products: dict[str, int] = {}
+
+        ttk.Label(form_frame, text="Article").pack(anchor="w")
+        self.inventory_product_combo = ttk.Combobox(
+            form_frame,
+            textvariable=self.inventory_product,
+            state="readonly",
+            width=28,
+        )
+        self.inventory_product_combo.pack(anchor="w")
+
+        ttk.Label(form_frame, text="Couleur").pack(anchor="w", pady=(10, 0))
+        ttk.Combobox(
+            form_frame,
+            textvariable=self.inventory_color,
+            values=COLOR_OPTIONS,
+            state="readonly",
+            width=18,
+        ).pack(anchor="w")
+
+        ttk.Label(form_frame, text="Taille").pack(anchor="w", pady=(10, 0))
+        ttk.Combobox(
+            form_frame,
+            textvariable=self.inventory_size,
+            values=SIZE_OPTIONS,
+            state="readonly",
+            width=18,
+        ).pack(anchor="w")
+
+        ttk.Label(form_frame, text="Quantité").pack(anchor="w", pady=(10, 0))
+        ttk.Entry(form_frame, textvariable=self.inventory_quantity, width=12).pack(anchor="w")
+
+        ttk.Button(
+            form_frame,
+            text="Mettre à jour inventaire",
+            command=self.update_inventory,
+        ).pack(anchor="w", pady=15)
+
+        list_frame = ttk.Labelframe(container, text="Inventaire par variante", padding=15)
+        list_frame.pack(side="left", fill="both", expand=True)
+
+        columns = ("article", "couleur", "taille", "quantite")
+        self.inventory_tree = ttk.Treeview(list_frame, columns=columns, show="headings")
+        for col in columns:
+            self.inventory_tree.heading(col, text=col.capitalize())
+            self.inventory_tree.column(col, width=150)
+        self.inventory_tree.pack(side="left", fill="both", expand=True)
+
+        scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.inventory_tree.yview)
+        scrollbar.pack(side="right", fill="y")
+        self.inventory_tree.configure(yscrollcommand=scrollbar.set)
 
     def _build_orders_tab(self) -> None:
         container = ttk.Frame(self.orders_tab, padding=20)
@@ -234,12 +363,50 @@ class AdminApp:
 
         self.images_label.config(text=f"{len(self.selected_images)} image(s) sélectionnée(s)")
 
+    def reset_product_form(self) -> None:
+        self.editing_product_id = None
+        self.product_name.set("")
+        self.product_description.delete("1.0", "end")
+        self.product_price.set("")
+        self.product_stock.set("")
+        self.product_status.set("pending")
+        self.product_color.set("")
+        self.product_size.set("")
+        self.product_category.set("")
+        self.selected_images.clear()
+        self.images_label.config(text="0 image(s) sélectionnée(s)")
+
+    def load_product_for_edit(self, product_id: int) -> None:
+        conn = get_connection()
+        product = conn.execute(
+            "SELECT * FROM products WHERE id = ?",
+            (product_id,),
+        ).fetchone()
+        conn.close()
+        if not product:
+            return
+        self.editing_product_id = product_id
+        self.product_name.set(product["name"])
+        self.product_description.delete("1.0", "end")
+        self.product_description.insert("1.0", product["description"])
+        self.product_price.set(str(product["price"]))
+        self.product_stock.set(str(product["stock"]))
+        self.product_status.set(product["status"])
+        self.product_color.set(product["color"] or "")
+        self.product_size.set(product["size"] or "")
+        self.product_category.set(product["category"] or "")
+        self.selected_images.clear()
+        self.images_label.config(text="0 image(s) sélectionnée(s)")
+
     def save_product(self) -> None:
         name = self.product_name.get().strip()
         description = self.product_description.get("1.0", "end").strip()
         price = self.product_price.get().strip()
         stock = self.product_stock.get().strip()
         status = self.product_status.get().strip()
+        color = self.product_color.get().strip()
+        size = self.product_size.get().strip()
+        category = self.product_category.get().strip()
 
         if not name or not description or not price or not stock:
             messagebox.showerror("Erreur", "Tous les champs sont requis.")
@@ -254,28 +421,58 @@ class AdminApp:
 
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO products (name, description, price, status, stock, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (name, description, price_value, status, stock_value, datetime.utcnow().isoformat()),
-        )
-        product_id = cursor.lastrowid
-
-        for idx, (data, mime_type) in enumerate(self.selected_images):
+        if self.editing_product_id is None:
             cursor.execute(
-                "INSERT INTO product_images (product_id, image_blob, mime_type, position) VALUES (?, ?, ?, ?)",
-                (product_id, data, mime_type, idx),
+                """
+                INSERT INTO products (name, description, price, status, stock, color, size, category, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    name,
+                    description,
+                    price_value,
+                    status,
+                    stock_value,
+                    color or None,
+                    size or None,
+                    category or None,
+                    datetime.utcnow().isoformat(),
+                ),
             )
+            product_id = cursor.lastrowid
+        else:
+            product_id = self.editing_product_id
+            cursor.execute(
+                """
+                UPDATE products
+                SET name = ?, description = ?, price = ?, status = ?, stock = ?, color = ?, size = ?, category = ?
+                WHERE id = ?
+                """,
+                (
+                    name,
+                    description,
+                    price_value,
+                    status,
+                    stock_value,
+                    color or None,
+                    size or None,
+                    category or None,
+                    product_id,
+                ),
+            )
+
+        if self.selected_images:
+            cursor.execute("DELETE FROM product_images WHERE product_id = ?", (product_id,))
+            for idx, (data, mime_type) in enumerate(self.selected_images):
+                cursor.execute(
+                    "INSERT INTO product_images (product_id, image_blob, mime_type, position) VALUES (?, ?, ?, ?)",
+                    (product_id, data, mime_type, idx),
+                )
 
         conn.commit()
         conn.close()
 
-        self.product_name.set("")
-        self.product_description.delete("1.0", "end")
-        self.product_price.set("")
-        self.product_stock.set("")
-        self.product_status.set("pending")
-        self.selected_images.clear()
-        self.images_label.config(text="0 image(s) sélectionnée(s)")
+        self.reset_product_form()
 
         self.refresh_all()
         messagebox.showinfo("Succès", "Article enregistré.")
@@ -283,6 +480,7 @@ class AdminApp:
     def refresh_all(self) -> None:
         self.refresh_dashboard()
         self.refresh_products()
+        self.refresh_inventory()
         self.refresh_orders()
         self.refresh_transactions()
 
@@ -335,6 +533,7 @@ class AdminApp:
         if not selected:
             return
         product_id = int(self.products_tree.item(selected[0])["values"][0])
+        self.load_product_for_edit(product_id)
         conn = get_connection()
         image = conn.execute(
             "SELECT image_blob, mime_type FROM product_images WHERE product_id = ? ORDER BY position LIMIT 1",
@@ -358,6 +557,76 @@ class AdminApp:
         photo = ImageTk.PhotoImage(img)
         self.preview_label.config(image=photo, text="")
         self.preview_label.image = photo
+
+    def refresh_inventory(self) -> None:
+        for item in self.inventory_tree.get_children():
+            self.inventory_tree.delete(item)
+
+        conn = get_connection()
+        products = conn.execute("SELECT id, name FROM products ORDER BY name").fetchall()
+        inventory = conn.execute(
+            """
+            SELECT p.name AS product_name, i.color, i.size, i.quantity
+            FROM product_inventory i
+            JOIN products p ON p.id = i.product_id
+            ORDER BY p.name, i.color, i.size
+            """
+        ).fetchall()
+        conn.close()
+
+        self.inventory_products = {product["name"]: product["id"] for product in products}
+        self.inventory_product_combo["values"] = list(self.inventory_products.keys())
+
+        for row in inventory:
+            self.inventory_tree.insert(
+                "",
+                "end",
+                values=(row["product_name"], row["color"], row["size"], row["quantity"]),
+            )
+
+    def update_inventory(self) -> None:
+        product_name = self.inventory_product.get().strip()
+        color = self.inventory_color.get().strip()
+        size = self.inventory_size.get().strip()
+        quantity_str = self.inventory_quantity.get().strip()
+
+        if not product_name or not color or not size or not quantity_str:
+            messagebox.showerror(
+                "Erreur",
+                "Sélectionnez un article, une couleur, une taille et une quantité.",
+            )
+            return
+        if not quantity_str.isdigit():
+            messagebox.showerror("Erreur", "Quantité invalide.")
+            return
+        quantity = int(quantity_str)
+        product_id = self.inventory_products.get(product_name)
+        if not product_id:
+            messagebox.showerror("Erreur", "Article introuvable.")
+            return
+
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO product_inventory (product_id, color, size, quantity)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(product_id, color, size)
+            DO UPDATE SET quantity = excluded.quantity
+            """,
+            (product_id, color, size, quantity),
+        )
+        total_stock = conn.execute(
+            "SELECT COALESCE(SUM(quantity), 0) AS total FROM product_inventory WHERE product_id = ?",
+            (product_id,),
+        ).fetchone()["total"]
+        cursor.execute("UPDATE products SET stock = ? WHERE id = ?", (total_stock, product_id))
+        conn.commit()
+        conn.close()
+        self.inventory_quantity.set("")
+        self.refresh_products()
+        self.refresh_inventory()
+        messagebox.showinfo("Succès", "Inventaire mis à jour.")
 
     def refresh_orders(self) -> None:
         for item in self.orders_tree.get_children():

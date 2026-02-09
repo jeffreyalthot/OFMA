@@ -11,14 +11,17 @@
           <div>
             <h3>{{ item.product['name'] }}</h3>
             <p class="muted">{{ item.product['description'][:100] }}{% if item.product['description']|length > 100 %}...{% endif %}</p>
+            <p class="muted">Couleur: {{ item.color }} | Taille: {{ item.size }}</p>
             <p class="price">€ {{ '%.2f'|format(item.product['price']) }}</p>
           </div>
           <div class="cart-actions">
-            <form method="post" action="{{ url_for('update_cart_item', product_id=item.product['id']) }}">
+            <form method="post" action="{{ url_for('update_cart_item') }}">
+              <input type="hidden" name="cart_key" value="{{ item.cart_key }}" />
               <input type="number" min="1" name="quantity" value="{{ item.quantity }}" />
               <button type="submit">Mettre à jour</button>
             </form>
-            <form method="post" action="{{ url_for('remove_cart_item', product_id=item.product['id']) }}">
+            <form method="post" action="{{ url_for('remove_cart_item') }}">
+              <input type="hidden" name="cart_key" value="{{ item.cart_key }}" />
               <button class="text-button" type="submit">Retirer</button>
             </form>
           </div>

@@ -36,6 +36,9 @@ def init_db():
             price REAL NOT NULL,
             status TEXT NOT NULL,
             stock INTEGER NOT NULL,
+            color TEXT,
+            size TEXT,
+            category TEXT,
             created_at TEXT NOT NULL
         )
         """
@@ -75,6 +78,12 @@ def init_db():
     if "shipping_fee" not in columns:
         cursor.execute("ALTER TABLE orders ADD COLUMN shipping_fee REAL NOT NULL DEFAULT 0")
 
+    cursor.execute("PRAGMA table_info(products)")
+    product_columns = {row[1] for row in cursor.fetchall()}
+    for column_name in ("color", "size", "category"):
+        if column_name not in product_columns:
+            cursor.execute(f"ALTER TABLE products ADD COLUMN {column_name} TEXT")
+
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS order_items (
@@ -82,9 +91,25 @@ def init_db():
             order_id INTEGER NOT NULL,
             product_id INTEGER NOT NULL,
             product_name TEXT NOT NULL,
+            color TEXT,
+            size TEXT,
             quantity INTEGER NOT NULL,
             price REAL NOT NULL,
             FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS product_inventory (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER NOT NULL,
+            color TEXT NOT NULL,
+            size TEXT NOT NULL,
+            quantity INTEGER NOT NULL,
+            UNIQUE(product_id, color, size),
+            FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE
         )
         """
     )
@@ -100,6 +125,12 @@ def init_db():
         )
         """
     )
+
+    cursor.execute("PRAGMA table_info(order_items)")
+    order_item_columns = {row[1] for row in cursor.fetchall()}
+    for column_name in ("color", "size"):
+        if column_name not in order_item_columns:
+            cursor.execute(f"ALTER TABLE order_items ADD COLUMN {column_name} TEXT")
 
     conn.commit()
     conn.close()
