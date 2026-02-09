@@ -8,6 +8,8 @@
     <div class="badge">Client PayPal: {{ paypal_client_id if paypal_client_id else 'Configurer' }}</div>
 
     <form method="post" action="{{ url_for('place_order') }}" class="order-form">
+      <label for="customer_name">Nom et prénom</label>
+      <input id="customer_name" name="customer_name" placeholder="Nom complet du client" required />
       <label for="address">Adresse de livraison</label>
       <input id="address" name="address" placeholder="Adresse complète du client" required />
       <button type="submit">Créer la commande</button>
