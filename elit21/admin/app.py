@@ -309,18 +309,22 @@ class AdminApp:
 
         address_frame = ttk.Labelframe(detail_frame, text="Adresse client", padding=10)
         address_frame.pack(fill="x", pady=10)
-        self.order_address_label = ttk.Label(
+        address_frame.configure(height=90)
+        address_frame.pack_propagate(False)
+        self.order_address_label = Label(
             address_frame,
             text="Adresse indisponible",
             justify="left",
             wraplength=320,
+            height=4,
+            anchor="w",
         )
-        self.order_address_label.pack(anchor="w")
+        self.order_address_label.pack(fill="both", expand=True)
 
         items_frame = ttk.Labelframe(detail_frame, text="Articles commandés", padding=10)
-        items_frame.pack(fill="x", side="bottom", pady=(10, 0))
+        items_frame.pack(fill="both", expand=True, side="bottom", pady=(10, 0))
         item_columns = ("article", "quantite", "prix")
-        self.order_items_tree = ttk.Treeview(items_frame, columns=item_columns, show="headings", height=4)
+        self.order_items_tree = ttk.Treeview(items_frame, columns=item_columns, show="headings", height=6)
         self.order_items_tree.heading("article", text="Article")
         self.order_items_tree.heading("quantite", text="Qté")
         self.order_items_tree.heading("prix", text="Prix")
@@ -332,15 +336,24 @@ class AdminApp:
         items_scrollbar.pack(side="right", fill="y")
         self.order_items_tree.configure(yscrollcommand=items_scrollbar.set)
 
-        ttk.Button(detail_frame, text="Marquer en traitement", command=lambda: self.update_order_status("processing")).pack(
-            fill="x", pady=5
-        )
-        ttk.Button(detail_frame, text="Marquer acceptée", command=lambda: self.update_order_status("accepted")).pack(
-            fill="x", pady=5
-        )
-        ttk.Button(detail_frame, text="Marquer complétée", command=self.complete_order).pack(
-            fill="x", pady=5
-        )
+        buttons_frame = ttk.Frame(detail_frame)
+        buttons_frame.pack(fill="x", pady=(10, 0))
+        buttons_frame.columnconfigure(0, weight=1)
+        ttk.Button(
+            buttons_frame,
+            text="Marquer en traitement",
+            command=lambda: self.update_order_status("processing"),
+        ).grid(row=0, column=0, sticky="e", pady=5)
+        ttk.Button(
+            buttons_frame,
+            text="Marquer acceptée",
+            command=lambda: self.update_order_status("accepted"),
+        ).grid(row=1, column=0, sticky="e", pady=5)
+        ttk.Button(
+            buttons_frame,
+            text="Marquer complétée",
+            command=self.complete_order,
+        ).grid(row=2, column=0, sticky="e", pady=5)
 
     def _build_transactions_tab(self) -> None:
         container = ttk.Frame(self.transactions_tab, padding=20)
