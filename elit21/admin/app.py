@@ -52,6 +52,23 @@ CATEGORY_OPTIONS = [
     "Chaussettes",
 ]
 
+COLOR_SWATCHES = {
+    "Noir": "#000000",
+    "Blanc": "#ffffff",
+    "Rouge": "#e74c3c",
+    "Bleu": "#3498db",
+    "Vert": "#2ecc71",
+    "Jaune": "#f1c40f",
+    "Orange": "#e67e22",
+    "Rose": "#fd79a8",
+    "Violet": "#9b59b6",
+    "Gris": "#95a5a6",
+    "Marron": "#8e6e53",
+    "Beige": "#f5f5dc",
+    "Marine": "#2c3e50",
+    "Turquoise": "#1abc9c",
+}
+
 
 class AdminApp:
     def __init__(self, root: Tk) -> None:
@@ -321,10 +338,50 @@ class AdminApp:
         )
         self.order_address_label.pack(fill="both", expand=True)
 
+        buttons_frame = ttk.Frame(detail_frame)
+        buttons_frame.pack(fill="x", pady=(10, 0))
+        buttons_frame.columnconfigure(1, weight=1)
+        indicator_frame = ttk.Frame(buttons_frame)
+        indicator_frame.grid(row=0, column=0, rowspan=3, sticky="w")
+        ttk.Label(indicator_frame, text="Couleur sélectionnée").grid(row=0, column=0, sticky="w")
+        self.order_item_color_label = Label(
+            indicator_frame,
+            text="N/A",
+            width=16,
+            relief="solid",
+            borderwidth=1,
+            anchor="center",
+        )
+        self.order_item_color_label.grid(row=1, column=0, sticky="w", pady=(2, 8))
+        ttk.Label(indicator_frame, text="Taille sélectionnée").grid(row=2, column=0, sticky="w")
+        self.order_item_size_label = ttk.Label(indicator_frame, text="N/A")
+        self.order_item_size_label.grid(row=3, column=0, sticky="w")
+        ttk.Button(
+            buttons_frame,
+            text="Marquer en traitement",
+            command=lambda: self.update_order_status("processing"),
+        ).grid(row=0, column=1, sticky="e", pady=5)
+        ttk.Button(
+            buttons_frame,
+            text="Marquer acceptée",
+            command=lambda: self.update_order_status("accepted"),
+        ).grid(row=1, column=1, sticky="e", pady=5)
+        ttk.Button(
+            buttons_frame,
+            text="Marquer complétée",
+            command=self.complete_order,
+        ).grid(row=2, column=1, sticky="e", pady=5)
+
         items_frame = ttk.Labelframe(detail_frame, text="Articles commandés", padding=10)
         items_frame.pack(fill="both", expand=True, side="bottom", pady=(10, 0))
-        item_columns = ("article", "quantite", "prix")
-        self.order_items_tree = ttk.Treeview(items_frame, columns=item_columns, show="headings", height=6)
+        item_columns = ("article", "quantite", "prix", "color", "size")
+        self.order_items_tree = ttk.Treeview(
+            items_frame,
+            columns=item_columns,
+            show="headings",
+            displaycolumns=("article", "quantite", "prix"),
+            height=6,
+        )
         self.order_items_tree.heading("article", text="Article")
         self.order_items_tree.heading("quantite", text="Qté")
         self.order_items_tree.heading("prix", text="Prix")
@@ -332,28 +389,10 @@ class AdminApp:
         self.order_items_tree.column("quantite", width=60)
         self.order_items_tree.column("prix", width=80)
         self.order_items_tree.pack(side="left", fill="both", expand=True)
+        self.order_items_tree.bind("<<TreeviewSelect>>", self.update_order_item_indicator)
         items_scrollbar = ttk.Scrollbar(items_frame, orient="vertical", command=self.order_items_tree.yview)
         items_scrollbar.pack(side="right", fill="y")
         self.order_items_tree.configure(yscrollcommand=items_scrollbar.set)
-
-        buttons_frame = ttk.Frame(detail_frame)
-        buttons_frame.pack(fill="x", pady=(10, 0))
-        buttons_frame.columnconfigure(0, weight=1)
-        ttk.Button(
-            buttons_frame,
-            text="Marquer en traitement",
-            command=lambda: self.update_order_status("processing"),
-        ).grid(row=0, column=0, sticky="e", pady=5)
-        ttk.Button(
-            buttons_frame,
-            text="Marquer acceptée",
-            command=lambda: self.update_order_status("accepted"),
-        ).grid(row=1, column=0, sticky="e", pady=5)
-        ttk.Button(
-            buttons_frame,
-            text="Marquer complétée",
-            command=self.complete_order,
-        ).grid(row=2, column=0, sticky="e", pady=5)
 
     def _build_transactions_tab(self) -> None:
         container = ttk.Frame(self.transactions_tab, padding=20)
@@ -733,7 +772,7 @@ class AdminApp:
         conn = get_connection()
         order = conn.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
         items = conn.execute(
-            "SELECT product_name, quantity, price FROM order_items WHERE order_id = ?",
+            "SELECT product_name, quantity, price, color, size FROM order_items WHERE order_id = ?",
             (order_id,),
         ).fetchall()
         conn.close()
@@ -750,8 +789,11 @@ class AdminApp:
                     item["product_name"],
                     item["quantity"],
                     f"€ {item['price']:.2f}",
+                    item["color"] or "",
+                    item["size"] or "",
                 ),
             )
+        self.clear_order_item_indicator()
         detail = (
             f"Client: {order['customer_name']}\n"
             f"Email: {order['customer_email']}\n"
@@ -763,6 +805,25 @@ class AdminApp:
         )
         self.order_address_label.config(text=self.format_customer_address(order))
         self.order_detail_label.config(text=detail)
+
+    def clear_order_item_indicator(self) -> None:
+        self.order_item_color_label.config(text="N/A", background=self.root.cget("bg"))
+        self.order_item_size_label.config(text="N/A")
+
+    def update_order_item_indicator(self, _event=None) -> None:
+        selected = self.order_items_tree.selection()
+        if not selected:
+            self.clear_order_item_indicator()
+            return
+        values = self.order_items_tree.item(selected[0]).get("values", [])
+        if len(values) < 5:
+            self.clear_order_item_indicator()
+            return
+        color_name = values[3] or "N/A"
+        size_name = values[4] or "N/A"
+        swatch_color = COLOR_SWATCHES.get(color_name, self.root.cget("bg"))
+        self.order_item_color_label.config(text=color_name, background=swatch_color)
+        self.order_item_size_label.config(text=size_name)
 
     def format_customer_address(self, order) -> str:
         name = str(order["customer_name"] or "").strip()
