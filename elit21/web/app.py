@@ -40,6 +40,15 @@ def create_app():
             session["cart"] = cart
         return cart
 
+    def build_cart_key(product_id: int, color: str, size: str) -> str:
+        return f"{product_id}|{color}|{size}"
+
+    def parse_cart_key(cart_key: str) -> tuple[int, str, str]:
+        parts = cart_key.split("|", 2)
+        if len(parts) != 3:
+            raise ValueError("Clé panier invalide.")
+        return int(parts[0]), parts[1], parts[2]
+
     def cart_count() -> int:
         return sum(get_cart().values())
 
@@ -47,7 +56,7 @@ def create_app():
         cart = get_cart()
         if not cart:
             return [], 0.0
-        product_ids = [int(pid) for pid in cart.keys()]
+        product_ids = list({parse_cart_key(key)[0] for key in cart.keys()})
         placeholders = ",".join("?" for _ in product_ids)
         conn = get_connection()
         products = conn.execute(
@@ -58,8 +67,9 @@ def create_app():
         items = []
         subtotal = 0.0
         products_map = {str(product["id"]): product for product in products}
-        for product_id, quantity in cart.items():
-            product = products_map.get(product_id)
+        for cart_key, quantity in cart.items():
+            product_id, color, size = parse_cart_key(cart_key)
+            product = products_map.get(str(product_id))
             if not product:
                 continue
             line_total = product["price"] * quantity
@@ -69,6 +79,9 @@ def create_app():
                     "product": product,
                     "quantity": quantity,
                     "line_total": line_total,
+                    "color": color,
+                    "size": size,
+                    "cart_key": cart_key,
                 }
             )
         return items, subtotal
@@ -121,11 +134,29 @@ def create_app():
             "SELECT id, mime_type FROM product_images WHERE product_id = ? ORDER BY position",
             (product_id,),
         ).fetchall()
+        inventory = conn.execute(
+            """
+            SELECT color, size, quantity
+            FROM product_inventory
+            WHERE product_id = ?
+            ORDER BY color, size
+            """,
+            (product_id,),
+        ).fetchall()
         conn.close()
         if not product:
             flash("Article introuvable.")
             return redirect(url_for("index"))
-        return render_template("product.html", product=product, images=images)
+        colors = sorted({row["color"] for row in inventory})
+        sizes = sorted({row["size"] for row in inventory})
+        return render_template(
+            "product.html",
+            product=product,
+            images=images,
+            colors=colors,
+            sizes=sizes,
+            inventory=inventory,
+        )
 
     @app.route("/cart")
     def cart():
@@ -141,43 +172,76 @@ def create_app():
 
     @app.route("/cart/add/<int:product_id>", methods=["POST"])
     def add_to_cart(product_id: int):
+        color = request.form.get("color", "").strip()
+        size = request.form.get("size", "").strip()
         conn = get_connection()
-        product = conn.execute(
-            "SELECT id, status, stock FROM products WHERE id = ?",
-            (product_id,),
+        product = conn.execute("SELECT id, status FROM products WHERE id = ?", (product_id,)).fetchone()
+        inventory_row = conn.execute(
+            """
+            SELECT quantity
+            FROM product_inventory
+            WHERE product_id = ? AND color = ? AND size = ?
+            """,
+            (product_id, color, size),
         ).fetchone()
         conn.close()
         if not product or product["status"] != "active":
             flash("Article indisponible.")
             return redirect(url_for("index"))
-        if product["stock"] <= 0:
+        if not color or not size:
+            flash("Veuillez sélectionner une couleur et une taille.")
+            return redirect(url_for("product_detail", product_id=product_id))
+        if not inventory_row or inventory_row["quantity"] <= 0:
             flash("Article en rupture de stock.")
             return redirect(url_for("product_detail", product_id=product_id))
         cart = get_cart()
-        cart[str(product_id)] = cart.get(str(product_id), 0) + 1
+        cart_key = build_cart_key(product_id, color, size)
+        current_quantity = cart.get(cart_key, 0)
+        if current_quantity + 1 > inventory_row["quantity"]:
+            flash("Stock insuffisant pour cette variante.")
+            return redirect(url_for("product_detail", product_id=product_id))
+        cart[cart_key] = current_quantity + 1
         session["cart"] = cart
         flash("Article ajouté au panier.")
         return redirect(url_for("cart"))
 
-    @app.route("/cart/update/<int:product_id>", methods=["POST"])
-    def update_cart_item(product_id: int):
+    @app.route("/cart/update", methods=["POST"])
+    def update_cart_item():
         quantity_str = request.form.get("quantity", "").strip()
+        cart_key = request.form.get("cart_key", "").strip()
         if not quantity_str.isdigit():
             flash("Quantité invalide.")
             return redirect(url_for("cart"))
         quantity = int(quantity_str)
         cart = get_cart()
-        if quantity <= 0:
-            cart.pop(str(product_id), None)
-        else:
-            cart[str(product_id)] = quantity
+        if cart_key:
+            if quantity <= 0:
+                cart.pop(cart_key, None)
+            else:
+                product_id, color, size = parse_cart_key(cart_key)
+                conn = get_connection()
+                inventory_row = conn.execute(
+                    """
+                    SELECT quantity
+                    FROM product_inventory
+                    WHERE product_id = ? AND color = ? AND size = ?
+                    """,
+                    (product_id, color, size),
+                ).fetchone()
+                conn.close()
+                if not inventory_row or quantity > inventory_row["quantity"]:
+                    flash("Stock insuffisant pour cette variante.")
+                    return redirect(url_for("cart"))
+                cart[cart_key] = quantity
         session["cart"] = cart
         return redirect(url_for("cart"))
 
-    @app.route("/cart/remove/<int:product_id>", methods=["POST"])
-    def remove_cart_item(product_id: int):
+    @app.route("/cart/remove", methods=["POST"])
+    def remove_cart_item():
+        cart_key = request.form.get("cart_key", "").strip()
         cart = get_cart()
-        cart.pop(str(product_id), None)
+        if cart_key:
+            cart.pop(cart_key, None)
         session["cart"] = cart
         return redirect(url_for("cart"))
 
@@ -337,18 +401,44 @@ def create_app():
         order_id = cursor.lastrowid
         for item in items:
             product = item["product"]
+            inventory = conn.execute(
+                """
+                SELECT id, quantity
+                FROM product_inventory
+                WHERE product_id = ? AND color = ? AND size = ?
+                """,
+                (product["id"], item["color"], item["size"]),
+            ).fetchone()
+            if not inventory or inventory["quantity"] < item["quantity"]:
+                conn.close()
+                flash("Stock insuffisant pour finaliser la commande.")
+                return redirect(url_for("cart"))
             cursor.execute(
                 """
-                INSERT INTO order_items (order_id, product_id, product_name, quantity, price)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO order_items (order_id, product_id, product_name, color, size, quantity, price)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     order_id,
                     product["id"],
                     product["name"],
+                    item["color"],
+                    item["size"],
                     item["quantity"],
                     product["price"],
                 ),
+            )
+            cursor.execute(
+                "UPDATE product_inventory SET quantity = ? WHERE id = ?",
+                (inventory["quantity"] - item["quantity"], inventory["id"]),
+            )
+            total_stock = conn.execute(
+                "SELECT COALESCE(SUM(quantity), 0) AS total FROM product_inventory WHERE product_id = ?",
+                (product["id"],),
+            ).fetchone()["total"]
+            cursor.execute(
+                "UPDATE products SET stock = ? WHERE id = ?",
+                (total_stock, product["id"]),
             )
         conn.commit()
         conn.close()
