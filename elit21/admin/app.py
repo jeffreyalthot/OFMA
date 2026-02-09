@@ -162,6 +162,16 @@ class AdminApp:
         self.order_detail_label = ttk.Label(detail_frame, text="Sélectionnez une commande")
         self.order_detail_label.pack(anchor="w")
 
+        address_frame = ttk.Labelframe(detail_frame, text="Adresse client", padding=10)
+        address_frame.pack(fill="x", pady=10)
+        self.order_address_label = ttk.Label(
+            address_frame,
+            text="Adresse indisponible",
+            justify="left",
+            wraplength=260,
+        )
+        self.order_address_label.pack(anchor="w")
+
         items_frame = ttk.Labelframe(detail_frame, text="Articles commandés", padding=10)
         items_frame.pack(fill="both", expand=True, pady=10)
         item_columns = ("article", "quantite", "prix")
@@ -422,13 +432,13 @@ class AdminApp:
         detail = (
             f"Client: {order['customer_name']}\n"
             f"Email: {order['customer_email']}\n"
-            f"Adresse complète: {order['customer_address']}\n"
             f"Date achat: {order['created_at']}\n"
             f"Statut: {order['status']}\n"
             f"Paiement: {order['payment_status']}\n"
             f"Livraison: € {order['shipping_fee']:.2f}\n"
             f"Total TTC: € {order['total']:.2f}"
         )
+        self.order_address_label.config(text=order["customer_address"])
         self.order_detail_label.config(text=detail)
 
     def update_order_status(self, status: str) -> None:
