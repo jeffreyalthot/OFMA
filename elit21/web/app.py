@@ -266,10 +266,35 @@ def create_app():
     @login_required
     def place_order():
         customer_name = request.form.get("customer_name", "").strip()
-        address = request.form.get("address", "").strip()
-        if not customer_name or not address:
-            flash("Veuillez renseigner votre nom et une adresse de livraison.")
+        house_number = request.form.get("house_number", "").strip()
+        street = request.form.get("street", "").strip()
+        apartment = request.form.get("apartment", "").strip()
+        city = request.form.get("city", "").strip()
+        province = request.form.get("province", "").strip()
+        country = request.form.get("country", "").strip()
+        postal_code = request.form.get("postal_code", "").strip()
+        required_fields = [
+            customer_name,
+            house_number,
+            street,
+            city,
+            province,
+            country,
+            postal_code,
+        ]
+        if not all(required_fields):
+            flash("Veuillez renseigner votre nom et une adresse complète de livraison.")
             return redirect(url_for("checkout"))
+        address_line = f"{house_number} {street}".strip()
+        if apartment:
+            address_line = f"{address_line}, Apt {apartment}"
+        address = "\n".join(
+            [
+                address_line,
+                f"{city}, {province}",
+                f"{country}, {postal_code}",
+            ]
+        )
         items, subtotal = load_cart_items()
         if not items:
             flash("Votre panier est vide.")

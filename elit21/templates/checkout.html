@@ -10,8 +10,20 @@
     <form method="post" action="{{ url_for('place_order') }}" class="order-form">
       <label for="customer_name">Nom et prénom</label>
       <input id="customer_name" name="customer_name" placeholder="Nom complet du client" required />
-      <label for="address">Adresse de livraison</label>
-      <input id="address" name="address" placeholder="Adresse complète du client" required />
+      <label for="house_number">N° maison</label>
+      <input id="house_number" name="house_number" placeholder="Numéro de maison" required />
+      <label for="street">Rue ou avenue</label>
+      <input id="street" name="street" placeholder="Rue ou avenue" required />
+      <label for="apartment">Appartement (facultatif)</label>
+      <input id="apartment" name="apartment" placeholder="Appartement, suite, étage" />
+      <label for="city">Ville</label>
+      <input id="city" name="city" placeholder="Ville" required />
+      <label for="province">Province</label>
+      <input id="province" name="province" placeholder="Province ou région" required />
+      <label for="country">Pays</label>
+      <input id="country" name="country" placeholder="Pays" required />
+      <label for="postal_code">Code postal</label>
+      <input id="postal_code" name="postal_code" placeholder="Code postal" required />
       <button type="submit">Créer la commande</button>
     </form>
 
