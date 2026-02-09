@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block hero %}
+<div class="hero">
+  <div>
+    <span class="badge">Marketplace premium</span>
+    <h1>Le marché ELIT21 pour des achats d'exception.</h1>
+    <p>
+      Découvrez une expérience d'achat fluide, sécurisée et inspirante. ELIT21 propose un
+      espace de vente moderne prêt à accueillir vos articles premium, avec paiement PayPal.
+    </p>
+    <a class="cta" href="#market">Explorer le market</a>
+  </div>
+  <div>
+    <div class="dashboard-grid">
+      <div class="dashboard-card">
+        <h4>PayPal sécurisé</h4>
+        <span>24/7</span>
+      </div>
+      <div class="dashboard-card">
+        <h4>Support VIP</h4>
+        <span>Premium</span>
+      </div>
+      <div class="dashboard-card">
+        <h4>Trust score</h4>
+        <span>98%</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<h2 id="market" class="section-title">Market ELIT21</h2>
+{% if products %}
+  <div class="market-grid">
+    {% for product in products %}
+      <div class="card">
+        {% if product['first_image_id'] %}
+          <img src="{{ url_for('product_image', product_id=product['id'], image_id=product['first_image_id']) }}" alt="{{ product['name'] }}" />
+        {% else %}
+          <img src="https://via.placeholder.com/400x240?text=ELIT21" alt="{{ product['name'] }}" />
+        {% endif %}
+        <div class="card-content">
+          <h3>{{ product['name'] }}</h3>
+          <p>{{ product['description'][:120] }}{% if product['description']|length > 120 %}...{% endif %}</p>
+          <div class="price">€ {{ '%.2f'|format(product['price']) }}</div>
+          <a href="{{ url_for('product_detail', product_id=product['id']) }}">Voir l'article</a>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <p>Aucun article disponible pour le moment. Revenez bientôt !</p>
+{% endif %}
+{% endblock %}
