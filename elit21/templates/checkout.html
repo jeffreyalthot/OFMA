@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="auth-container">
+  <h2>Checkout sécurisé</h2>
+  <p>Le module de paiement PayPal est prêt à être connecté via l'API.</p>
+  <div class="badge">Client PayPal: {{ paypal_client_id if paypal_client_id else 'Configurer' }}</div>
+  <p>Une fois intégré, les transactions seront enregistrées automatiquement.</p>
+</div>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="auth-container">
+  <h2>Inscription</h2>
+  <form method="post">
+    <input type="text" name="full_name" placeholder="Nom complet" required />
+    <input type="email" name="email" placeholder="Email" required />
+    <input type="password" name="password" placeholder="Mot de passe" required />
+    <button type="submit">Créer un compte</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ELIT21</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body>
+  <header>
+    <nav>
+      <div class="logo">ELIT21</div>
+      <div>
+        <a href="{{ url_for('index') }}">Market</a>
+        {% if session.get('user_id') %}
+        <a href="{{ url_for('checkout') }}">Checkout</a>
+        <a href="{{ url_for('logout') }}">Déconnexion</a>
+        {% else %}
+        <a href="{{ url_for('login') }}">Connexion</a>
+        <a href="{{ url_for('register') }}">Inscription</a>
+        {% endif %}
+      </div>
+    </nav>
+    {% block hero %}{% endblock %}
+  </header>
+
+  <main>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="flash">{{ messages[0] }}</div>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer>
+    <p>ELIT21 &copy; 2024 - Marketplace premium sécurisé.</p>
+  </footer>
+</body>
+</html>

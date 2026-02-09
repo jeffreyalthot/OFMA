@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="product-detail">
+  <div>
+    <h2>{{ product['name'] }}</h2>
+    <p>{{ product['description'] }}</p>
+    <div class="price">€ {{ '%.2f'|format(product['price']) }}</div>
+    <p><strong>Stock:</strong> {{ product['stock'] }}</p>
+    <p class="badge">Paiement sécurisé via PayPal</p>
+  </div>
+  <div class="product-gallery">
+    {% if images %}
+      {% for image in images %}
+        <img src="{{ url_for('product_image', product_id=product['id'], image_id=image['id']) }}" alt="{{ product['name'] }}" />
+      {% endfor %}
+    {% else %}
+      <img src="https://via.placeholder.com/400x240?text=ELIT21" alt="{{ product['name'] }}" />
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
