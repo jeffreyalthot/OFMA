@@ -118,6 +118,8 @@ def create_app():
         except urllib.error.HTTPError as exc:
             details = exc.read().decode("utf-8")
             raise RuntimeError(f"PayPal auth échouée: {details}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Connexion PayPal impossible: {exc.reason}") from exc
         access_token = token_payload.get("access_token")
         if not access_token:
             raise RuntimeError("Réponse d'authentification PayPal invalide.")
@@ -141,6 +143,8 @@ def create_app():
         except urllib.error.HTTPError as exc:
             details = exc.read().decode("utf-8")
             raise RuntimeError(f"PayPal API échouée: {details}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Connexion API PayPal impossible: {exc.reason}") from exc
 
     def collect_shipping_data(form_data):
         customer_name = form_data.get("customer_name", "").strip()
