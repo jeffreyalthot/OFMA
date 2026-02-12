@@ -157,6 +157,46 @@ def create_app():
             "postal_code": postal_code,
         }
 
+    def extract_paypal_customer_info(capture_payload: dict) -> tuple[str | None, str | None, str | None]:
+        payer = capture_payload.get("payer") or {}
+        payer_name = payer.get("name") or {}
+        full_name = " ".join(
+            part
+            for part in [payer_name.get("given_name"), payer_name.get("surname")]
+            if part
+        ).strip()
+        email = (payer.get("email_address") or "").strip() or None
+
+        purchase_units = capture_payload.get("purchase_units") or []
+        shipping = purchase_units[0].get("shipping") if purchase_units else {}
+        shipping_name = (shipping.get("name") or {}).get("full_name", "").strip()
+        address_data = shipping.get("address") or {}
+        address_parts = [
+            address_data.get("address_line_1", "").strip(),
+            address_data.get("address_line_2", "").strip(),
+            " ".join(
+                part
+                for part in [
+                    address_data.get("admin_area_2", "").strip(),
+                    address_data.get("admin_area_1", "").strip(),
+                ]
+                if part
+            ).strip(),
+            " ".join(
+                part
+                for part in [
+                    address_data.get("country_code", "").strip(),
+                    address_data.get("postal_code", "").strip(),
+                ]
+                if part
+            ).strip(),
+        ]
+        address = "\n".join(part for part in address_parts if part)
+
+        resolved_name = shipping_name or full_name or None
+        resolved_address = address or None
+        return resolved_name, email, resolved_address
+
     def load_cart_items():
         cart = get_cart()
         if not cart:
@@ -436,20 +476,22 @@ def create_app():
     @login_required
     def create_paypal_order():
         shipping_data = collect_shipping_data(request.json or {})
-        if not shipping_data:
-            return jsonify({"error": "Adresse de livraison incomplète."}), 400
         items, subtotal = load_cart_items()
         if not items:
             return jsonify({"error": "Votre panier est vide."}), 400
         total = subtotal + SHIPPING_FEE
         conn = get_connection()
         user = conn.execute(
-            "SELECT email FROM users WHERE id = ?",
+            "SELECT email, full_name FROM users WHERE id = ?",
             (session.get("user_id"),),
         ).fetchone()
         if not user:
             conn.close()
             return jsonify({"error": "Compte utilisateur introuvable."}), 404
+        shipping_data = shipping_data or {
+            "customer_name": user["full_name"],
+            "address": "Adresse transmise par PayPal après connexion.",
+        }
         cursor = conn.cursor()
         cursor.execute(
             """
@@ -579,6 +621,7 @@ def create_app():
             conn.close()
             return jsonify({"error": str(exc)}), 502
         status = capture.get("status")
+        customer_name, customer_email, customer_address = extract_paypal_customer_info(capture)
         purchase_units = capture.get("purchase_units") or []
         capture_id = None
         if purchase_units:
@@ -626,10 +669,21 @@ def create_app():
         cursor.execute(
             """
             UPDATE orders
-            SET status = ?, payment_status = ?
+            SET status = ?,
+                payment_status = ?,
+                customer_name = COALESCE(?, customer_name),
+                customer_email = COALESCE(?, customer_email),
+                customer_address = COALESCE(?, customer_address)
             WHERE id = ?
             """,
-            ("confirmed", f"paid:{capture_id or paypal_order_id}", local_order_id),
+            (
+                "confirmed",
+                f"paid:{capture_id or paypal_order_id}",
+                customer_name,
+                customer_email,
+                customer_address,
+                local_order_id,
+            ),
         )
         cursor.execute(
             "INSERT INTO transactions (order_id, completed_at, total) VALUES (?, ?, ?)",

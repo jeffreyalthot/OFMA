@@ -17,6 +17,7 @@ python run.py
 ## Variables d'environnement
 
 - `PAYPAL_CLIENT_ID` : identifiant PayPal (sandbox/production)
+- `PAYPAL_CLIENT_SECRET` : secret API associé au Client ID (jamais exposé côté front)
 - `PAYPAL_ENV` : `sandbox` ou `live`
 - `ELIT21_SECRET` : secret de session Flask
 
@@ -31,3 +32,18 @@ elit21/
 ```
 
 Aucun article n'est créé par défaut : la vitrine démarre vierge et se remplit via l'interface Tkinter.
+
+
+## Configuration PayPal (Checkout)
+
+1. Créez une application REST dans le dashboard développeur PayPal (`My Apps & Credentials`).
+2. Récupérez le **Client ID** et le **Client Secret** de l’environnement visé (`sandbox` pour tests, `live` pour production).
+3. Exportez les variables avant de lancer l’application :
+
+```bash
+export PAYPAL_CLIENT_ID="<votre_client_id>"
+export PAYPAL_CLIENT_SECRET="<votre_client_secret>"
+export PAYPAL_ENV="sandbox"
+```
+
+Sur la page Checkout, l’acheteur peut se connecter à PayPal ; les informations payeur/adresse renvoyées par PayPal sont ensuite réutilisées pour finaliser la commande.

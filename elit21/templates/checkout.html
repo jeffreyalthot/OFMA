@@ -4,26 +4,26 @@
 <div class="checkout-grid">
   <div class="checkout-form">
     <h2>Checkout sécurisé</h2>
-    <p>Complétez vos coordonnées puis confirmez le paiement via PayPal.</p>
+    <p>Connectez-vous à PayPal pour autoriser le paiement et récupérer automatiquement vos informations client.</p>
     <div class="badge">Client PayPal: {{ paypal_client_id if paypal_client_id else 'Configurer' }}</div>
 
     <form id="checkout-form" class="order-form">
       <label for="customer_name">Nom et prénom</label>
-      <input id="customer_name" name="customer_name" placeholder="Nom complet du client" required />
+      <input id="customer_name" name="customer_name" placeholder="Nom complet du client (optionnel)" />
       <label for="house_number">N° maison</label>
-      <input id="house_number" name="house_number" placeholder="Numéro de maison" required />
+      <input id="house_number" name="house_number" placeholder="Numéro de maison (optionnel)" />
       <label for="street">Rue ou avenue</label>
-      <input id="street" name="street" placeholder="Rue ou avenue" required />
+      <input id="street" name="street" placeholder="Rue ou avenue (optionnel)" />
       <label for="apartment">Appartement (facultatif)</label>
       <input id="apartment" name="apartment" placeholder="Appartement, suite, étage" />
       <label for="city">Ville</label>
-      <input id="city" name="city" placeholder="Ville" required />
+      <input id="city" name="city" placeholder="Ville (optionnel)" />
       <label for="province">Province</label>
-      <input id="province" name="province" placeholder="Province ou région" required />
+      <input id="province" name="province" placeholder="Province ou région (optionnel)" />
       <label for="country">Pays</label>
-      <input id="country" name="country" placeholder="Pays" required />
+      <input id="country" name="country" placeholder="Pays (optionnel)" />
       <label for="postal_code">Code postal</label>
-      <input id="postal_code" name="postal_code" placeholder="Code postal" required />
+      <input id="postal_code" name="postal_code" placeholder="Code postal (optionnel)" />
     </form>
 
     <div id="checkout-status" class="muted"></div>
@@ -83,10 +83,6 @@
         style: { shape: 'pill', color: 'gold', layout: 'vertical', label: 'paypal' },
         createOrder: function() {
           const payload = formDataAsJson();
-          if (!form.reportValidity()) {
-            setStatus('Merci de compléter les informations de livraison.', true);
-            return Promise.reject(new Error('invalid-form'));
-          }
           setStatus('Création de la commande PayPal en cours...', false);
           return fetch("{{ url_for('create_paypal_order') }}", {
             method: 'POST',
