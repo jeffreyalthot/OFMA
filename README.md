@@ -17,8 +17,22 @@ python run.py
 ## Variables d'environnement
 
 - `PAYPAL_CLIENT_ID` : identifiant PayPal (sandbox/production)
+- `PAYPAL_CLIENT_SECRET` : secret API PayPal
+- `PAYPAL_SECRET_KEY_1` : alias accepté pour compatibilité (si `PAYPAL_CLIENT_SECRET` absent)
 - `PAYPAL_ENV` : `sandbox` ou `live`
+- `SHIPPING_FEE` : frais de livraison fixes
 - `ELIT21_SECRET` : secret de session Flask
+
+Exemple de fichier `.env` :
+
+```env
+APP_NAME=AI_market
+ELIT21_SECRET=change-me
+PAYPAL_CLIENT_ID=AZtrIu_myFqZAEokeJLNZvFfqENW2N9VMFH4sb4YVmQw5h1ItKAa0rAjvc7cLTYGokhyPqbr0_LyAynM
+PAYPAL_SECRET_KEY_1=ELmY8HCdmV_iigHzbNAlA-4oEw2Hk4ezX2MlWPBe1nlHmLCVP2shv7cJspCRaIUtW90nUrDfAo5YncOS
+PAYPAL_ENV=sandbox
+SHIPPING_FEE=9.99
+```
 
 ## Structure
 

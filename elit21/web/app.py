@@ -23,8 +23,30 @@ from flask import (
 from elit21.db import get_connection, init_db
 
 
+def load_env_file() -> None:
+    env_path = os.path.join(os.getcwd(), ".env")
+    if not os.path.exists(env_path):
+        return
+    with open(env_path, "r", encoding="utf-8") as env_file:
+        for raw_line in env_file:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            if not key:
+                continue
+            cleaned_value = value.strip().strip('\"').strip("'").strip()
+            os.environ.setdefault(key, cleaned_value)
+
+
+load_env_file()
+
+
 PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID", "demo-client-id")
-PAYPAL_CLIENT_SECRET = os.getenv("PAYPAL_CLIENT_SECRET", "")
+PAYPAL_CLIENT_SECRET = os.getenv("PAYPAL_CLIENT_SECRET") or os.getenv(
+    "PAYPAL_SECRET_KEY_1", ""
+)
 PAYPAL_ENV = os.getenv("PAYPAL_ENV", "sandbox").lower()
 SHIPPING_FEE = float(os.getenv("SHIPPING_FEE", "9.99"))
 
