@@ -4,7 +4,7 @@
 <div class="checkout-grid">
   <div class="checkout-form">
     <h2>Checkout sécurisé</h2>
-    <p>Complétez vos coordonnées puis confirmez le paiement via PayPal.</p>
+    <p>Complétez vos coordonnées puis confirmez le paiement via PayPal ou carte crédit/débit.</p>
     <div class="badge">Client PayPal: {{ paypal_client_id if paypal_client_id else 'Configurer' }}</div>
 
     <form id="checkout-form" class="order-form">
@@ -28,6 +28,24 @@
 
     <div id="checkout-status" class="muted"></div>
     <div id="paypal-button-container" class="paypal-box"></div>
+    <div id="card-fields-wrapper" class="paypal-box" hidden>
+      <p class="muted">Paiement par carte</p>
+      <div class="card-fields-grid">
+        <div>
+          <label>Numéro de carte</label>
+          <div id="card-number" class="card-field"></div>
+        </div>
+        <div>
+          <label>Expiration</label>
+          <div id="card-expiry" class="card-field"></div>
+        </div>
+        <div>
+          <label>CVV</label>
+          <div id="card-cvv" class="card-field"></div>
+        </div>
+      </div>
+      <button id="card-pay-button" type="button" class="action-button">Payer par carte</button>
+    </div>
     {% if not paypal_configured %}
       <p class="flash">Configurez PAYPAL_CLIENT_ID et PAYPAL_CLIENT_SECRET (ou PAYPAL_SECRET_KEY_1) dans .env pour activer le paiement.</p>
     {% endif %}
@@ -58,12 +76,14 @@
   </div>
 </div>
 
-<script src="https://www.paypal.com/sdk/js?client-id={{ paypal_client_id }}&currency=EUR&intent=capture"></script>
+<script src="https://www.paypal.com/sdk/js?client-id={{ paypal_client_id }}&components=buttons,card-fields&currency=EUR&intent=capture"></script>
 <script>
   (function() {
     const statusEl = document.getElementById('checkout-status');
     const form = document.getElementById('checkout-form');
     const paypalContainer = document.getElementById('paypal-button-container');
+    const cardWrapper = document.getElementById('card-fields-wrapper');
+    const cardPayButton = document.getElementById('card-pay-button');
     let pendingLocalOrderId = null;
 
     function setStatus(message, isError) {
@@ -79,53 +99,59 @@
       return values;
     }
 
+    function createServerOrder() {
+      const payload = formDataAsJson();
+      if (!form.reportValidity()) {
+        setStatus('Merci de compléter les informations de livraison.', true);
+        return Promise.reject(new Error('invalid-form'));
+      }
+      setStatus('Création de la commande PayPal en cours...', false);
+      return fetch("{{ url_for('create_paypal_order') }}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+          if (!ok || !data.id) {
+            setStatus(data.error || 'Erreur lors de la préparation du paiement.', true);
+            throw new Error('create-order-failed');
+          }
+          pendingLocalOrderId = data.local_order_id;
+          window.localStorage.setItem('elit21_checkout_order_id', data.local_order_id);
+          return data.id;
+        });
+    }
+
+    function captureServerOrder(paypalOrderId) {
+      const localOrderId = pendingLocalOrderId || window.localStorage.getItem('elit21_checkout_order_id');
+      setStatus('Validation du paiement...', false);
+      return fetch("{{ url_for('capture_paypal_order') }}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paypal_order_id: paypalOrderId,
+          local_order_id: localOrderId
+        })
+      })
+        .then((response) => response.json().then((payload) => ({ ok: response.ok, payload })))
+        .then(({ ok, payload }) => {
+          if (!ok || !payload.ok) {
+            setStatus(payload.error || 'Paiement non confirmé.', true);
+            throw new Error('capture-failed');
+          }
+          pendingLocalOrderId = null;
+          window.localStorage.removeItem('elit21_checkout_order_id');
+          window.location.href = payload.redirect_url;
+        });
+    }
+
     if (window.paypal && {{ 'true' if paypal_configured else 'false' }}) {
       paypal.Buttons({
         style: { shape: 'pill', color: 'gold', layout: 'vertical', label: 'paypal' },
-        createOrder: function() {
-          const payload = formDataAsJson();
-          if (!form.reportValidity()) {
-            setStatus('Merci de compléter les informations de livraison.', true);
-            return Promise.reject(new Error('invalid-form'));
-          }
-          setStatus('Création de la commande PayPal en cours...', false);
-          return fetch("{{ url_for('create_paypal_order') }}", {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          })
-            .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
-            .then(({ ok, data }) => {
-              if (!ok || !data.id) {
-                setStatus(data.error || 'Erreur lors de la préparation du paiement.', true);
-                throw new Error('create-order-failed');
-              }
-              pendingLocalOrderId = data.local_order_id;
-              window.localStorage.setItem('elit21_checkout_order_id', data.local_order_id);
-              return data.id;
-            });
-        },
+        createOrder: createServerOrder,
         onApprove: function(data) {
-          const localOrderId = pendingLocalOrderId || window.localStorage.getItem('elit21_checkout_order_id');
-          setStatus('Validation du paiement...', false);
-          return fetch("{{ url_for('capture_paypal_order') }}", {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              paypal_order_id: data.orderID,
-              local_order_id: localOrderId
-            })
-          })
-            .then((response) => response.json().then((payload) => ({ ok: response.ok, payload })))
-            .then(({ ok, payload }) => {
-              if (!ok || !payload.ok) {
-                setStatus(payload.error || 'Paiement non confirmé.', true);
-                throw new Error('capture-failed');
-              }
-              pendingLocalOrderId = null;
-              window.localStorage.removeItem('elit21_checkout_order_id');
-              window.location.href = payload.redirect_url;
-            });
+          return captureServerOrder(data.orderID);
         },
         onError: function(err) {
           if (err && err.message === 'invalid-form') {
@@ -134,9 +160,66 @@
           setStatus('Une erreur est survenue avec PayPal. Réessayez.', true);
         }
       }).render(paypalContainer);
+
+      if (paypal.CardFields) {
+        const cardFields = paypal.CardFields({
+          createOrder: createServerOrder,
+          onApprove: function(data) {
+            return captureServerOrder(data.orderID);
+          },
+          onError: function(err) {
+            if (err && err.message === 'invalid-form') {
+              return;
+            }
+            setStatus('Une erreur est survenue avec la carte. Réessayez.', true);
+          }
+        });
+
+        if (cardFields.isEligible()) {
+          cardWrapper.hidden = false;
+          cardFields.NumberField().render('#card-number');
+          cardFields.ExpiryField().render('#card-expiry');
+          cardFields.CVVField().render('#card-cvv');
+          cardPayButton.addEventListener('click', function() {
+            setStatus('Validation du paiement carte...', false);
+            cardFields.submit().catch(function(err) {
+              if (err && err.message !== 'invalid-form') {
+                setStatus('Paiement carte refusé. Vérifiez les informations saisies.', true);
+              }
+            });
+          });
+        }
+      }
     } else {
       setStatus('Le paiement PayPal est momentanément indisponible.', true);
     }
   })();
 </script>
+
+<style>
+  .card-fields-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.75rem;
+    margin: 0.75rem 0;
+  }
+
+  .card-field {
+    border: 1px solid #d5d9de;
+    border-radius: 8px;
+    min-height: 44px;
+    padding: 0.65rem 0.75rem;
+    background: #fff;
+  }
+
+  .action-button {
+    border: none;
+    border-radius: 999px;
+    padding: 0.7rem 1.2rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: #fff;
+    background: linear-gradient(120deg, #0a56e8, #54b3ff);
+  }
+</style>
 {% endblock %}
