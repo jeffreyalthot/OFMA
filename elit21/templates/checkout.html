@@ -76,7 +76,6 @@
   </div>
 </div>
 
-<script src="https://www.paypal.com/sdk/js?client-id={{ paypal_client_id }}&components=buttons,card-fields&currency=EUR&intent=capture"></script>
 <script>
   (function() {
     const statusEl = document.getElementById('checkout-status');
@@ -153,7 +152,29 @@
         });
     }
 
-    if (window.paypal && {{ 'true' if paypal_configured else 'false' }}) {
+    function loadPayPalSdk() {
+      if (window.paypal) {
+        return Promise.resolve(window.paypal);
+      }
+      if (!{{ 'true' if paypal_configured else 'false' }}) {
+        return Promise.reject(new Error('paypal-not-configured'));
+      }
+      const sdkScript = document.createElement('script');
+      sdkScript.src = 'https://www.paypal.com/sdk/js?client-id={{ paypal_client_id }}&components=buttons,card-fields&currency=EUR&intent=capture';
+      sdkScript.setAttribute('data-sdk-integration-source', 'button-factory');
+      sdkScript.async = true;
+      return new Promise(function(resolve, reject) {
+        sdkScript.onload = function() {
+          resolve(window.paypal);
+        };
+        sdkScript.onerror = function() {
+          reject(new Error('paypal-sdk-load-error'));
+        };
+        document.head.appendChild(sdkScript);
+      });
+    }
+
+    function renderPayPalButtons() {
       paypal.Buttons({
         style: { shape: 'pill', color: 'gold', layout: 'vertical', label: 'paypal' },
         onClick: function(data, actions) {
@@ -216,9 +237,21 @@
           });
         }
       }
-    } else {
-      setStatus('Le paiement PayPal est momentanément indisponible.', true);
     }
+
+    setStatus('Chargement sécurisé du module PayPal...', false);
+    loadPayPalSdk()
+      .then(function() {
+        setStatus('', false);
+        renderPayPalButtons();
+      })
+      .catch(function(error) {
+        if (error && error.message === 'paypal-not-configured') {
+          setStatus('Le paiement PayPal est momentanément indisponible.', true);
+          return;
+        }
+        setStatus('Impossible de charger le module PayPal. Réessayez dans quelques instants.', true);
+      });
   })();
 </script>
 
