@@ -100,11 +100,11 @@
     }
 
     function createServerOrder() {
-      const payload = formDataAsJson();
       if (!form.reportValidity()) {
         setStatus('Merci de compléter les informations de livraison.', true);
         return Promise.reject(new Error('invalid-form'));
       }
+      const payload = formDataAsJson();
       setStatus('Création de la commande PayPal en cours...', false);
       return fetch("{{ url_for('create_paypal_order') }}", {
         method: 'POST',
@@ -149,6 +149,13 @@
     if (window.paypal && {{ 'true' if paypal_configured else 'false' }}) {
       paypal.Buttons({
         style: { shape: 'pill', color: 'gold', layout: 'vertical', label: 'paypal' },
+        onClick: function(data, actions) {
+          if (!form.reportValidity()) {
+            setStatus('Merci de compléter les informations de livraison.', true);
+            return actions.reject();
+          }
+          return actions.resolve();
+        },
         createOrder: createServerOrder,
         onApprove: function(data) {
           return captureServerOrder(data.orderID);
@@ -181,6 +188,10 @@
           cardFields.ExpiryField().render('#card-expiry');
           cardFields.CVVField().render('#card-cvv');
           cardPayButton.addEventListener('click', function() {
+            if (!form.reportValidity()) {
+              setStatus('Merci de compléter les informations de livraison.', true);
+              return;
+            }
             setStatus('Validation du paiement carte...', false);
             cardFields.submit().catch(function(err) {
               if (err && err.message !== 'invalid-form') {
