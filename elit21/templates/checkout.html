@@ -4,10 +4,10 @@
 <div class="checkout-grid">
   <div class="checkout-form">
     <h2>Checkout sécurisé</h2>
-    <p>Finalisez votre commande avec le module PayPal intégré.</p>
+    <p>Complétez vos coordonnées puis confirmez le paiement via PayPal.</p>
     <div class="badge">Client PayPal: {{ paypal_client_id if paypal_client_id else 'Configurer' }}</div>
 
-    <form method="post" action="{{ url_for('place_order') }}" class="order-form">
+    <form id="checkout-form" class="order-form">
       <label for="customer_name">Nom et prénom</label>
       <input id="customer_name" name="customer_name" placeholder="Nom complet du client" required />
       <label for="house_number">N° maison</label>
@@ -24,11 +24,13 @@
       <input id="country" name="country" placeholder="Pays" required />
       <label for="postal_code">Code postal</label>
       <input id="postal_code" name="postal_code" placeholder="Code postal" required />
-      <button type="submit">Créer la commande</button>
     </form>
 
+    <div id="checkout-status" class="muted"></div>
     <div id="paypal-button-container" class="paypal-box"></div>
-    <p class="muted">Le bouton PayPal utilise les clés API configurées dans votre fichier .env.</p>
+    {% if not paypal_configured %}
+      <p class="flash">Configurez PAYPAL_CLIENT_ID et PAYPAL_CLIENT_SECRET pour activer le paiement.</p>
+    {% endif %}
   </div>
 
   <div class="checkout-summary">
@@ -58,24 +60,77 @@
 
 <script src="https://www.paypal.com/sdk/js?client-id={{ paypal_client_id }}&currency=EUR&intent=capture"></script>
 <script>
-  if (window.paypal) {
-    paypal.Buttons({
-      style: { shape: 'pill', color: 'gold', layout: 'vertical', label: 'paypal' },
-      createOrder: function(data, actions) {
-        return actions.order.create({
-          purchase_units: [{
-            amount: {
-              value: '{{ '%.2f'|format(total) }}'
-            }
-          }]
-        });
-      },
-      onApprove: function(data, actions) {
-        return actions.order.capture().then(function() {
-          window.location.href = "{{ url_for('checkout') }}";
-        });
+  (function() {
+    const statusEl = document.getElementById('checkout-status');
+    const form = document.getElementById('checkout-form');
+    const paypalContainer = document.getElementById('paypal-button-container');
+
+    function setStatus(message, isError) {
+      statusEl.textContent = message || '';
+      statusEl.className = isError ? 'flash' : 'muted';
+    }
+
+    function formDataAsJson() {
+      const values = {};
+      for (const field of form.elements) {
+        if (field.name) values[field.name] = field.value;
       }
-    }).render('#paypal-button-container');
-  }
+      return values;
+    }
+
+    if (window.paypal && {{ 'true' if paypal_configured else 'false' }}) {
+      paypal.Buttons({
+        style: { shape: 'pill', color: 'gold', layout: 'vertical', label: 'paypal' },
+        createOrder: function() {
+          const payload = formDataAsJson();
+          if (!form.reportValidity()) {
+            setStatus('Merci de compléter les informations de livraison.', true);
+            return Promise.reject(new Error('invalid-form'));
+          }
+          setStatus('Création de la commande PayPal en cours...', false);
+          return fetch("{{ url_for('create_paypal_order') }}", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          })
+            .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+            .then(({ ok, data }) => {
+              if (!ok || !data.id) {
+                setStatus(data.error || 'Erreur lors de la préparation du paiement.', true);
+                throw new Error('create-order-failed');
+              }
+              window.localStorage.setItem('elit21_checkout_order_id', data.local_order_id);
+              return data.id;
+            });
+        },
+        onApprove: function(data) {
+          const localOrderId = window.localStorage.getItem('elit21_checkout_order_id');
+          setStatus('Validation du paiement...', false);
+          return fetch("{{ url_for('capture_paypal_order') }}", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              paypal_order_id: data.orderID,
+              local_order_id: localOrderId
+            })
+          })
+            .then((response) => response.json().then((payload) => ({ ok: response.ok, payload })))
+            .then(({ ok, payload }) => {
+              if (!ok || !payload.ok) {
+                setStatus(payload.error || 'Paiement non confirmé.', true);
+                throw new Error('capture-failed');
+              }
+              window.localStorage.removeItem('elit21_checkout_order_id');
+              window.location.href = payload.redirect_url;
+            });
+        },
+        onError: function() {
+          setStatus('Une erreur est survenue avec PayPal. Réessayez.', true);
+        }
+      }).render(paypalContainer);
+    } else {
+      setStatus('Le paiement PayPal est momentanément indisponible.', true);
+    }
+  })();
 </script>
 {% endblock %}

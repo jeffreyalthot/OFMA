@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import base64
 import hashlib
+import json
 import os
+import urllib.error
+import urllib.request
 from datetime import datetime
 from functools import wraps
 
 from flask import (
     Flask,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -19,8 +24,17 @@ from elit21.db import get_connection, init_db
 
 
 PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID", "demo-client-id")
-PAYPAL_ENV = os.getenv("PAYPAL_ENV", "sandbox")
+PAYPAL_CLIENT_SECRET = os.getenv("PAYPAL_CLIENT_SECRET", "")
+PAYPAL_ENV = os.getenv("PAYPAL_ENV", "sandbox").lower()
 SHIPPING_FEE = float(os.getenv("SHIPPING_FEE", "9.99"))
+
+
+def paypal_base_url() -> str:
+    return (
+        "https://api-m.paypal.com"
+        if PAYPAL_ENV == "live"
+        else "https://api-m.sandbox.paypal.com"
+    )
 
 
 def create_app():
@@ -51,6 +65,97 @@ def create_app():
 
     def cart_count() -> int:
         return sum(get_cart().values())
+
+    def ensure_paypal_configured() -> tuple[bool, str]:
+        if not PAYPAL_CLIENT_ID or PAYPAL_CLIENT_ID == "demo-client-id":
+            return False, "Client PayPal non configuré."
+        if not PAYPAL_CLIENT_SECRET:
+            return False, "Secret PayPal non configuré."
+        return True, ""
+
+    def paypal_request(path: str, method: str = "GET", payload: dict | None = None):
+        is_configured, config_error = ensure_paypal_configured()
+        if not is_configured:
+            raise RuntimeError(config_error)
+        auth_value = f"{PAYPAL_CLIENT_ID}:{PAYPAL_CLIENT_SECRET}".encode("utf-8")
+        basic_token = base64.b64encode(auth_value).decode("ascii")
+        token_request = urllib.request.Request(
+            f"{paypal_base_url()}/v1/oauth2/token",
+            data=b"grant_type=client_credentials",
+            headers={
+                "Authorization": f"Basic {basic_token}",
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(token_request, timeout=20) as response:
+                token_payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            details = exc.read().decode("utf-8")
+            raise RuntimeError(f"PayPal auth échouée: {details}") from exc
+        access_token = token_payload.get("access_token")
+        if not access_token:
+            raise RuntimeError("Réponse d'authentification PayPal invalide.")
+        request_data = None
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/json",
+        }
+        if payload is not None:
+            request_data = json.dumps(payload).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+        api_request = urllib.request.Request(
+            f"{paypal_base_url()}{path}",
+            data=request_data,
+            headers=headers,
+            method=method,
+        )
+        try:
+            with urllib.request.urlopen(api_request, timeout=20) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            details = exc.read().decode("utf-8")
+            raise RuntimeError(f"PayPal API échouée: {details}") from exc
+
+    def collect_shipping_data(form_data):
+        customer_name = form_data.get("customer_name", "").strip()
+        house_number = form_data.get("house_number", "").strip()
+        street = form_data.get("street", "").strip()
+        apartment = form_data.get("apartment", "").strip()
+        city = form_data.get("city", "").strip()
+        province = form_data.get("province", "").strip()
+        country = form_data.get("country", "").strip()
+        postal_code = form_data.get("postal_code", "").strip()
+        required_fields = [
+            customer_name,
+            house_number,
+            street,
+            city,
+            province,
+            country,
+            postal_code,
+        ]
+        if not all(required_fields):
+            return None
+        address_line = f"{house_number} {street}".strip()
+        if apartment:
+            address_line = f"{address_line}, Apt {apartment}"
+        address = "\n".join(
+            [
+                address_line,
+                f"{city}, {province}",
+                f"{country}, {postal_code}",
+            ]
+        )
+        return {
+            "customer_name": customer_name,
+            "address": address,
+            "city": city,
+            "country": country,
+            "postal_code": postal_code,
+        }
 
     def load_cart_items():
         cart = get_cart()
@@ -324,45 +429,18 @@ def create_app():
             subtotal=subtotal,
             shipping_fee=SHIPPING_FEE,
             total=total,
+            paypal_configured=ensure_paypal_configured()[0],
         )
 
-    @app.route("/checkout/place-order", methods=["POST"])
+    @app.route("/api/checkout/create-paypal-order", methods=["POST"])
     @login_required
-    def place_order():
-        customer_name = request.form.get("customer_name", "").strip()
-        house_number = request.form.get("house_number", "").strip()
-        street = request.form.get("street", "").strip()
-        apartment = request.form.get("apartment", "").strip()
-        city = request.form.get("city", "").strip()
-        province = request.form.get("province", "").strip()
-        country = request.form.get("country", "").strip()
-        postal_code = request.form.get("postal_code", "").strip()
-        required_fields = [
-            customer_name,
-            house_number,
-            street,
-            city,
-            province,
-            country,
-            postal_code,
-        ]
-        if not all(required_fields):
-            flash("Veuillez renseigner votre nom et une adresse complète de livraison.")
-            return redirect(url_for("checkout"))
-        address_line = f"{house_number} {street}".strip()
-        if apartment:
-            address_line = f"{address_line}, Apt {apartment}"
-        address = "\n".join(
-            [
-                address_line,
-                f"{city}, {province}",
-                f"{country}, {postal_code}",
-            ]
-        )
+    def create_paypal_order():
+        shipping_data = collect_shipping_data(request.json or {})
+        if not shipping_data:
+            return jsonify({"error": "Adresse de livraison incomplète."}), 400
         items, subtotal = load_cart_items()
         if not items:
-            flash("Votre panier est vide.")
-            return redirect(url_for("cart"))
+            return jsonify({"error": "Votre panier est vide."}), 400
         total = subtotal + SHIPPING_FEE
         conn = get_connection()
         user = conn.execute(
@@ -371,8 +449,7 @@ def create_app():
         ).fetchone()
         if not user:
             conn.close()
-            flash("Compte utilisateur introuvable.")
-            return redirect(url_for("checkout"))
+            return jsonify({"error": "Compte utilisateur introuvable."}), 404
         cursor = conn.cursor()
         cursor.execute(
             """
@@ -388,9 +465,9 @@ def create_app():
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                customer_name,
+                shipping_data["customer_name"],
                 user["email"],
-                address,
+                shipping_data["address"],
                 "pending",
                 "pending",
                 SHIPPING_FEE,
@@ -411,8 +488,7 @@ def create_app():
             ).fetchone()
             if not inventory or inventory["quantity"] < item["quantity"]:
                 conn.close()
-                flash("Stock insuffisant pour finaliser la commande.")
-                return redirect(url_for("cart"))
+                return jsonify({"error": "Stock insuffisant pour finaliser la commande."}), 409
             cursor.execute(
                 """
                 INSERT INTO order_items (order_id, product_id, product_name, color, size, quantity, price)
@@ -428,22 +504,168 @@ def create_app():
                     product["price"],
                 ),
             )
+        try:
+            paypal_order = paypal_request(
+                "/v2/checkout/orders",
+                method="POST",
+                payload={
+                    "intent": "CAPTURE",
+                    "purchase_units": [
+                        {
+                            "reference_id": str(order_id),
+                            "amount": {
+                                "currency_code": "EUR",
+                                "value": f"{total:.2f}",
+                            },
+                            "description": f"Commande ELIT21 #{order_id}",
+                        }
+                    ],
+                    "application_context": {
+                        "brand_name": "ELIT21",
+                        "shipping_preference": "NO_SHIPPING",
+                        "user_action": "PAY_NOW",
+                    },
+                },
+            )
+        except RuntimeError as exc:
+            conn.rollback()
+            conn.close()
+            return jsonify({"error": str(exc)}), 502
+        paypal_order_id = paypal_order.get("id")
+        if not paypal_order_id:
+            conn.rollback()
+            conn.close()
+            return jsonify({"error": "Réponse PayPal invalide."}), 502
+        cursor.execute(
+            "UPDATE orders SET payment_status = ? WHERE id = ?",
+            (f"paypal_order:{paypal_order_id}", order_id),
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({"id": paypal_order_id, "local_order_id": order_id})
+
+    @app.route("/api/checkout/capture-paypal-order", methods=["POST"])
+    @login_required
+    def capture_paypal_order():
+        payload = request.json or {}
+        paypal_order_id = (payload.get("paypal_order_id") or "").strip()
+        local_order_id = payload.get("local_order_id")
+        if not paypal_order_id or not local_order_id:
+            return jsonify({"error": "Paramètres de paiement manquants."}), 400
+        conn = get_connection()
+        order = conn.execute(
+            "SELECT * FROM orders WHERE id = ?",
+            (local_order_id,),
+        ).fetchone()
+        if not order:
+            conn.close()
+            return jsonify({"error": "Commande introuvable."}), 404
+        current_user = conn.execute(
+            "SELECT email FROM users WHERE id = ?", (session.get("user_id"),)
+        ).fetchone()
+        if not current_user or order["customer_email"] != current_user["email"]:
+            conn.close()
+            return jsonify({"error": "Accès non autorisé à cette commande."}), 403
+        if f"paypal_order:{paypal_order_id}" != order["payment_status"]:
+            conn.close()
+            return jsonify({"error": "Commande PayPal incohérente."}), 409
+        try:
+            capture = paypal_request(
+                f"/v2/checkout/orders/{paypal_order_id}/capture",
+                method="POST",
+                payload={},
+            )
+        except RuntimeError as exc:
+            conn.close()
+            return jsonify({"error": str(exc)}), 502
+        status = capture.get("status")
+        purchase_units = capture.get("purchase_units") or []
+        capture_id = None
+        if purchase_units:
+            payments = purchase_units[0].get("payments") or {}
+            captures = payments.get("captures") or []
+            if captures:
+                capture_id = captures[0].get("id")
+        if status != "COMPLETED":
+            conn.close()
+            return jsonify({"error": "Le paiement PayPal n'est pas confirmé."}), 409
+        order_items = conn.execute(
+            "SELECT * FROM order_items WHERE order_id = ?",
+            (local_order_id,),
+        ).fetchall()
+        for item in order_items:
+            inventory = conn.execute(
+                """
+                SELECT id, quantity
+                FROM product_inventory
+                WHERE product_id = ? AND color = ? AND size = ?
+                """,
+                (item["product_id"], item["color"], item["size"]),
+            ).fetchone()
+            if not inventory or inventory["quantity"] < item["quantity"]:
+                conn.close()
+                return jsonify({"error": "Stock insuffisant après confirmation de paiement."}), 409
+        cursor = conn.cursor()
+        for item in order_items:
+            inventory = conn.execute(
+                "SELECT id, quantity FROM product_inventory WHERE product_id = ? AND color = ? AND size = ?",
+                (item["product_id"], item["color"], item["size"]),
+            ).fetchone()
             cursor.execute(
                 "UPDATE product_inventory SET quantity = ? WHERE id = ?",
                 (inventory["quantity"] - item["quantity"], inventory["id"]),
             )
             total_stock = conn.execute(
                 "SELECT COALESCE(SUM(quantity), 0) AS total FROM product_inventory WHERE product_id = ?",
-                (product["id"],),
+                (item["product_id"],),
             ).fetchone()["total"]
             cursor.execute(
                 "UPDATE products SET stock = ? WHERE id = ?",
-                (total_stock, product["id"]),
+                (total_stock, item["product_id"]),
             )
+        cursor.execute(
+            """
+            UPDATE orders
+            SET status = ?, payment_status = ?
+            WHERE id = ?
+            """,
+            ("confirmed", f"paid:{capture_id or paypal_order_id}", local_order_id),
+        )
+        cursor.execute(
+            "INSERT INTO transactions (order_id, completed_at, total) VALUES (?, ?, ?)",
+            (local_order_id, datetime.utcnow().isoformat(), order["total"]),
+        )
         conn.commit()
         conn.close()
-        flash("Commande enregistrée. Procédez au paiement PayPal.")
-        return redirect(url_for("checkout"))
+        session["cart"] = {}
+        return jsonify(
+            {
+                "ok": True,
+                "redirect_url": url_for("checkout_success", order_id=local_order_id),
+            }
+        )
+
+    @app.route("/checkout/success/<int:order_id>")
+    @login_required
+    def checkout_success(order_id: int):
+        conn = get_connection()
+        order = conn.execute(
+            "SELECT * FROM orders WHERE id = ?",
+            (order_id,),
+        ).fetchone()
+        current_user = conn.execute(
+            "SELECT email FROM users WHERE id = ?", (session.get("user_id"),)
+        ).fetchone()
+        conn.close()
+        if (
+            not order
+            or not current_user
+            or order["customer_email"] != current_user["email"]
+            or not str(order["payment_status"]).startswith("paid:")
+        ):
+            flash("Commande non confirmée.")
+            return redirect(url_for("checkout"))
+        return render_template("checkout_success.html", order=order)
 
     return app
 
