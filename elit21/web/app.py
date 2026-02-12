@@ -6,6 +6,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime
 from functools import wraps
 
@@ -457,13 +458,37 @@ def create_app():
     @app.route("/api/checkout/create-paypal-order", methods=["POST"])
     @login_required
     def create_paypal_order():
+        def to_money(value: float | Decimal) -> Decimal:
+            return Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        def money_as_text(value: Decimal) -> str:
+            return format(value, ".2f")
+
         shipping_data = collect_shipping_data(request.json or {})
         if not shipping_data:
             return jsonify({"error": "Adresse de livraison incomplète."}), 400
         items, subtotal = load_cart_items()
         if not items:
             return jsonify({"error": "Votre panier est vide."}), 400
-        total = subtotal + SHIPPING_FEE
+        subtotal_money = to_money(subtotal)
+        shipping_fee_money = to_money(SHIPPING_FEE)
+        total_money = to_money(subtotal_money + shipping_fee_money)
+        paypal_items = []
+        for item in items:
+            unit_amount = to_money(item["product"]["price"])
+            paypal_items.append(
+                {
+                    "name": item["product"]["name"][:127],
+                    "description": f"Couleur: {item['color']} / Taille: {item['size']}"[:127],
+                    "sku": f"{item['product']['id']}-{item['color']}-{item['size']}"[:127],
+                    "unit_amount": {
+                        "currency_code": "EUR",
+                        "value": money_as_text(unit_amount),
+                    },
+                    "quantity": str(item["quantity"]),
+                    "category": "PHYSICAL_GOODS",
+                }
+            )
         conn = get_connection()
         user = conn.execute(
             "SELECT email FROM users WHERE id = ?",
@@ -493,7 +518,7 @@ def create_app():
                 "pending",
                 "pending",
                 SHIPPING_FEE,
-                total,
+                float(total_money),
                 datetime.utcnow().isoformat(),
             ),
         )
@@ -537,9 +562,20 @@ def create_app():
                             "reference_id": str(order_id),
                             "amount": {
                                 "currency_code": "EUR",
-                                "value": f"{total:.2f}",
+                                "value": money_as_text(total_money),
+                                "breakdown": {
+                                    "item_total": {
+                                        "currency_code": "EUR",
+                                        "value": money_as_text(subtotal_money),
+                                    },
+                                    "shipping": {
+                                        "currency_code": "EUR",
+                                        "value": money_as_text(shipping_fee_money),
+                                    },
+                                },
                             },
                             "description": f"Commande ELIT21 #{order_id}",
+                            "items": paypal_items,
                         }
                     ],
                     "application_context": {
