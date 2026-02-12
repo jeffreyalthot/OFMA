@@ -64,6 +64,7 @@
     const statusEl = document.getElementById('checkout-status');
     const form = document.getElementById('checkout-form');
     const paypalContainer = document.getElementById('paypal-button-container');
+    let pendingLocalOrderId = null;
 
     function setStatus(message, isError) {
       statusEl.textContent = message || '';
@@ -99,12 +100,13 @@
                 setStatus(data.error || 'Erreur lors de la préparation du paiement.', true);
                 throw new Error('create-order-failed');
               }
+              pendingLocalOrderId = data.local_order_id;
               window.localStorage.setItem('elit21_checkout_order_id', data.local_order_id);
               return data.id;
             });
         },
         onApprove: function(data) {
-          const localOrderId = window.localStorage.getItem('elit21_checkout_order_id');
+          const localOrderId = pendingLocalOrderId || window.localStorage.getItem('elit21_checkout_order_id');
           setStatus('Validation du paiement...', false);
           return fetch("{{ url_for('capture_paypal_order') }}", {
             method: 'POST',
@@ -120,11 +122,15 @@
                 setStatus(payload.error || 'Paiement non confirmé.', true);
                 throw new Error('capture-failed');
               }
+              pendingLocalOrderId = null;
               window.localStorage.removeItem('elit21_checkout_order_id');
               window.location.href = payload.redirect_url;
             });
         },
-        onError: function() {
+        onError: function(err) {
+          if (err && err.message === 'invalid-form') {
+            return;
+          }
           setStatus('Une erreur est survenue avec PayPal. Réessayez.', true);
         }
       }).render(paypalContainer);
