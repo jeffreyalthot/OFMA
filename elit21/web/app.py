@@ -604,7 +604,18 @@ def create_app():
         )
         conn.commit()
         conn.close()
-        return jsonify({"id": paypal_order_id, "local_order_id": order_id})
+        approval_url = None
+        for link in paypal_order.get("links") or []:
+            if link.get("rel") == "approve":
+                approval_url = link.get("href")
+                break
+        return jsonify(
+            {
+                "id": paypal_order_id,
+                "local_order_id": order_id,
+                "approve_url": approval_url,
+            }
+        )
 
     @app.route("/api/checkout/capture-paypal-order", methods=["POST"])
     @login_required

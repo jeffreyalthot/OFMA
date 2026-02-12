@@ -85,6 +85,7 @@
     const cardWrapper = document.getElementById('card-fields-wrapper');
     const cardPayButton = document.getElementById('card-pay-button');
     let pendingLocalOrderId = null;
+    let pendingApproveUrl = null;
 
     function setStatus(message, isError) {
       statusEl.textContent = message || '';
@@ -118,9 +119,15 @@
             throw new Error('create-order-failed');
           }
           pendingLocalOrderId = data.local_order_id;
+          pendingApproveUrl = data.approve_url || null;
           window.localStorage.setItem('elit21_checkout_order_id', data.local_order_id);
           return data.id;
         });
+    }
+
+    function isPopupFailure(err) {
+      const message = ((err && err.message) || '').toLowerCase();
+      return message.includes('popup') || message.includes('window') || message.includes('zoid');
     }
 
     function captureServerOrder(paypalOrderId) {
@@ -160,8 +167,16 @@
         onApprove: function(data) {
           return captureServerOrder(data.orderID);
         },
+        onCancel: function() {
+          setStatus('Paiement annulé. Vous pouvez réessayer.', true);
+        },
         onError: function(err) {
           if (err && err.message === 'invalid-form') {
+            return;
+          }
+          if (isPopupFailure(err) && pendingApproveUrl) {
+            setStatus('Le popup PayPal a été bloqué. Redirection vers PayPal en cours...', true);
+            window.location.href = pendingApproveUrl;
             return;
           }
           setStatus('Une erreur est survenue avec PayPal. Réessayez.', true);
