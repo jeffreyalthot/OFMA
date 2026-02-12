@@ -572,25 +572,42 @@ def create_app():
         payload = request.json or {}
         paypal_order_id = (payload.get("paypal_order_id") or "").strip()
         local_order_id = payload.get("local_order_id")
-        if not paypal_order_id or not local_order_id:
+        if not paypal_order_id:
             return jsonify({"error": "Paramètres de paiement manquants."}), 400
         conn = get_connection()
-        order = conn.execute(
-            "SELECT * FROM orders WHERE id = ?",
-            (local_order_id,),
-        ).fetchone()
-        if not order:
-            conn.close()
-            return jsonify({"error": "Commande introuvable."}), 404
         current_user = conn.execute(
             "SELECT email FROM users WHERE id = ?", (session.get("user_id"),)
         ).fetchone()
-        if not current_user or order["customer_email"] != current_user["email"]:
+        if not current_user:
+            conn.close()
+            return jsonify({"error": "Accès non autorisé à cette commande."}), 403
+        order = None
+        if local_order_id:
+            order = conn.execute(
+                "SELECT * FROM orders WHERE id = ?",
+                (local_order_id,),
+            ).fetchone()
+        if not order:
+            order = conn.execute(
+                """
+                SELECT *
+                FROM orders
+                WHERE payment_status = ? AND customer_email = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (f"paypal_order:{paypal_order_id}", current_user["email"]),
+            ).fetchone()
+        if not order:
+            conn.close()
+            return jsonify({"error": "Commande introuvable."}), 404
+        if order["customer_email"] != current_user["email"]:
             conn.close()
             return jsonify({"error": "Accès non autorisé à cette commande."}), 403
         if f"paypal_order:{paypal_order_id}" != order["payment_status"]:
             conn.close()
             return jsonify({"error": "Commande PayPal incohérente."}), 409
+        local_order_id = order["id"]
         try:
             capture = paypal_request(
                 f"/v2/checkout/orders/{paypal_order_id}/capture",
