@@ -29,7 +29,7 @@
     <div id="checkout-status" class="muted"></div>
     <div id="paypal-button-container" class="paypal-box"></div>
     {% if not paypal_configured %}
-      <p class="flash">Configurez PAYPAL_CLIENT_ID et PAYPAL_CLIENT_SECRET pour activer le paiement.</p>
+      <p class="flash">Configurez PAYPAL_CLIENT_ID et PAYPAL_CLIENT_SECRET (ou PAYPAL_SECRET_KEY_1) dans .env pour activer le paiement.</p>
     {% endif %}
   </div>
 
