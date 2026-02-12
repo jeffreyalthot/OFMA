@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import io
+import html
 from datetime import datetime
 from tkinter import (
+    Canvas,
     Tk,
+    IntVar,
     StringVar,
     Text,
     ttk,
@@ -109,18 +112,55 @@ class AdminApp:
         container = ttk.Frame(self.dashboard_tab, padding=20)
         container.pack(fill="both", expand=True)
 
+        cards_frame = ttk.Frame(container)
+        cards_frame.pack(fill="x", anchor="n")
+
         for label in (
             "Total commandes",
             "Commandes en traitement",
             "Chiffre d'affaires",
             "Articles actifs",
         ):
-            frame = ttk.Frame(container, padding=15, relief="ridge")
-            frame.pack(side="left", padx=10, pady=10, expand=True, fill="both")
+            frame = ttk.Frame(cards_frame, padding=10, relief="ridge")
+            frame.pack(side="left", padx=8, pady=(2, 8), expand=True, fill="x")
             ttk.Label(frame, text=label, font=("Segoe UI", 12, "bold")).pack(anchor="w")
             value_label = ttk.Label(frame, text="0", font=("Segoe UI", 24, "bold"))
-            value_label.pack(anchor="w", pady=10)
+            value_label.pack(anchor="w", pady=6)
             self.dashboard_cards[label] = value_label
+
+        charts_frame = ttk.Frame(container)
+        charts_frame.pack(fill="both", expand=True, pady=(0, 12))
+
+        bar_card = ttk.Labelframe(charts_frame, text="Ventes & Commandes (7 jours)", padding=10)
+        bar_card.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        self.sales_canvas = ttk.Frame(bar_card)
+        self.sales_canvas.pack(fill="both", expand=True)
+        self.sales_chart = Canvas(self.sales_canvas, bg="#ffffff", highlightthickness=0)
+        self.sales_chart.pack(fill="both", expand=True)
+
+        pie_card = ttk.Labelframe(charts_frame, text="Répartition revenus / jour (7 jours)", padding=10)
+        pie_card.pack(side="left", fill="both", expand=True)
+        self.revenue_pie = Canvas(pie_card, bg="#ffffff", highlightthickness=0)
+        self.revenue_pie.pack(fill="both", expand=True)
+
+        export_frame = ttk.Labelframe(container, text="Export transactions", padding=12)
+        export_frame.pack(fill="x", side="bottom")
+
+        ttk.Label(export_frame, text="Plage de dates :").pack(side="left", padx=(0, 8))
+        self.export_days = IntVar(value=7)
+        for value in (1, 7, 15, 30):
+            ttk.Radiobutton(
+                export_frame,
+                text=f"{value} jour" if value == 1 else f"{value} jours",
+                value=value,
+                variable=self.export_days,
+            ).pack(side="left", padx=4)
+
+        ttk.Button(
+            export_frame,
+            text="Exporter transactions (Excel)",
+            command=self.export_transactions_excel,
+        ).pack(side="right")
 
     def _build_products_tab(self) -> None:
         container = ttk.Frame(self.products_tab, padding=20)
@@ -564,12 +604,194 @@ class AdminApp:
             "SELECT COUNT(*) AS count FROM products WHERE status = ?",
             ("active",),
         ).fetchone()["count"]
+        last_7_days = conn.execute(
+            """
+            SELECT DATE(completed_at) AS day,
+                   COUNT(*) AS orders_count,
+                   COALESCE(SUM(total), 0) AS revenue
+            FROM transactions
+            WHERE DATE(completed_at) >= DATE('now', '-6 day')
+            GROUP BY DATE(completed_at)
+            ORDER BY DATE(completed_at)
+            """
+        ).fetchall()
         conn.close()
 
         self.dashboard_cards["Total commandes"].config(text=str(total_orders))
         self.dashboard_cards["Commandes en traitement"].config(text=str(processing_orders))
         self.dashboard_cards["Chiffre d'affaires"].config(text=f"€ {revenue:.2f}")
         self.dashboard_cards["Articles actifs"].config(text=str(active_products))
+
+        self.draw_sales_and_orders_chart(last_7_days)
+        self.draw_revenue_pie_chart(last_7_days)
+
+    def _normalized_7_days(self, rows):
+        by_day = {row["day"]: row for row in rows}
+        dates = []
+        for offset in range(6, -1, -1):
+            day = datetime.utcnow().date().fromordinal(datetime.utcnow().date().toordinal() - offset)
+            day_key = day.isoformat()
+            row = by_day.get(day_key)
+            dates.append(
+                {
+                    "day": day_key,
+                    "label": day.strftime("%d/%m"),
+                    "orders_count": row["orders_count"] if row else 0,
+                    "revenue": row["revenue"] if row else 0,
+                }
+            )
+        return dates
+
+    def draw_sales_and_orders_chart(self, rows) -> None:
+        data = self._normalized_7_days(rows)
+        canvas = self.sales_chart
+        canvas.update_idletasks()
+        width = max(canvas.winfo_width(), 420)
+        height = max(canvas.winfo_height(), 220)
+        canvas.delete("all")
+
+        left, right, top, bottom = 38, width - 12, 16, height - 34
+        chart_h = bottom - top
+        max_value = max(max(item["orders_count"], item["revenue"]) for item in data) or 1
+        canvas.create_line(left, top, left, bottom, fill="#777")
+        canvas.create_line(left, bottom, right, bottom, fill="#777")
+
+        slot = (right - left) / len(data)
+        group_w = slot * 0.7
+        bar_w = group_w / 2 - 3
+        for idx, item in enumerate(data):
+            x0 = left + idx * slot + (slot - group_w) / 2
+            x_orders0 = x0
+            x_orders1 = x_orders0 + bar_w
+            x_sales0 = x_orders1 + 6
+            x_sales1 = x_sales0 + bar_w
+            h_orders = (item["orders_count"] / max_value) * chart_h
+            h_sales = (item["revenue"] / max_value) * chart_h
+            canvas.create_rectangle(x_orders0, bottom - h_orders, x_orders1, bottom, fill="#4a90e2", outline="")
+            canvas.create_rectangle(x_sales0, bottom - h_sales, x_sales1, bottom, fill="#27ae60", outline="")
+            canvas.create_text((x0 + x_sales1) / 2, bottom + 12, text=item["label"], font=("Segoe UI", 8))
+
+        canvas.create_rectangle(right - 140, top + 2, right - 128, top + 14, fill="#4a90e2", outline="")
+        canvas.create_text(right - 122, top + 8, text="Commandes", anchor="w", font=("Segoe UI", 8))
+        canvas.create_rectangle(right - 70, top + 2, right - 58, top + 14, fill="#27ae60", outline="")
+        canvas.create_text(right - 52, top + 8, text="Ventes (€)", anchor="w", font=("Segoe UI", 8))
+
+    def draw_revenue_pie_chart(self, rows) -> None:
+        data = [item for item in self._normalized_7_days(rows) if item["revenue"] > 0]
+        canvas = self.revenue_pie
+        canvas.update_idletasks()
+        width = max(canvas.winfo_width(), 320)
+        height = max(canvas.winfo_height(), 220)
+        canvas.delete("all")
+
+        if not data:
+            canvas.create_text(width / 2, height / 2, text="Aucun revenu sur 7 jours", fill="#666")
+            return
+
+        total = sum(item["revenue"] for item in data)
+        box = (20, 18, min(width - 140, 200), min(height - 20, 200))
+        colors = ["#4a90e2", "#27ae60", "#f39c12", "#8e44ad", "#16a085", "#d35400", "#c0392b"]
+        start_angle = 0
+        legend_y = 22
+        for idx, item in enumerate(data):
+            extent = (item["revenue"] / total) * 360
+            color = colors[idx % len(colors)]
+            canvas.create_arc(*box, start=start_angle, extent=extent, fill=color, outline="#ffffff")
+            pct = item["revenue"] / total * 100
+            canvas.create_rectangle(width - 126, legend_y - 6, width - 114, legend_y + 6, fill=color, outline="")
+            canvas.create_text(
+                width - 108,
+                legend_y,
+                anchor="w",
+                text=f"{item['label']} ({pct:.0f}%)",
+                font=("Segoe UI", 8),
+            )
+            legend_y += 20
+            start_angle += extent
+
+    def export_transactions_excel(self) -> None:
+        days = self.export_days.get()
+        if days not in (1, 7, 15, 30):
+            days = 7
+        conn = get_connection()
+        transactions = conn.execute(
+            """
+            SELECT t.id,
+                   t.order_id,
+                   t.completed_at,
+                   t.total,
+                   o.customer_name,
+                   o.customer_email,
+                   o.customer_address,
+                   o.status,
+                   o.payment_status,
+                   o.shipping_fee,
+                   o.created_at
+            FROM transactions t
+            JOIN orders o ON o.id = t.order_id
+            WHERE DATE(t.completed_at) >= DATE('now', ?)
+            ORDER BY t.completed_at DESC
+            """,
+            (f"-{days - 1} day",),
+        ).fetchall()
+        conn.close()
+
+        if not transactions:
+            messagebox.showinfo("Export", "Aucune transaction à exporter pour cette plage.")
+            return
+
+        default_name = f"transactions_{days}j_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.xls"
+        path = filedialog.asksaveasfilename(
+            title="Exporter les transactions",
+            defaultextension=".xls",
+            initialfile=default_name,
+            filetypes=[("Fichier Excel", "*.xls")],
+        )
+        if not path:
+            return
+
+        headers = [
+            "ID Transaction",
+            "ID Commande",
+            "Date transaction",
+            "Montant",
+            "Client",
+            "Email",
+            "Adresse",
+            "Statut commande",
+            "Statut paiement",
+            "Frais livraison",
+            "Date commande",
+        ]
+        rows_html = []
+        for tx in transactions:
+            row = [
+                tx["id"],
+                tx["order_id"],
+                tx["completed_at"],
+                f"{tx['total']:.2f}",
+                tx["customer_name"],
+                tx["customer_email"],
+                tx["customer_address"],
+                tx["status"],
+                tx["payment_status"],
+                f"{tx['shipping_fee']:.2f}",
+                tx["created_at"],
+            ]
+            rows_html.append("<tr>" + "".join(f"<td>{html.escape(str(v or ''))}</td>" for v in row) + "</tr>")
+
+        table_header = "".join(f"<th>{h}</th>" for h in headers)
+        html_content = (
+            "<html><head><meta charset='utf-8'></head><body>"
+            "<table border='1'>"
+            f"<tr>{table_header}</tr>"
+            + "".join(rows_html)
+            + "</table></body></html>"
+        )
+
+        with open(path, "w", encoding="utf-8") as file:
+            file.write(html_content)
+        messagebox.showinfo("Export", f"Export Excel réalisé: {path}")
 
     def refresh_products(self) -> None:
         for item in self.products_tree.get_children():
