@@ -104,6 +104,19 @@ def create_app():
             raise RuntimeError(config_error)
         auth_value = f"{PAYPAL_CLIENT_ID}:{PAYPAL_CLIENT_SECRET}".encode("utf-8")
         basic_token = base64.b64encode(auth_value).decode("ascii")
+        # Some deployments define HTTPS proxy variables that break PayPal with
+        # "Tunnel connection failed: 403 Forbidden". We keep the default network
+        # path first, and only retry without proxy for that specific proxy failure.
+        direct_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+        def open_request(req: urllib.request.Request):
+            try:
+                return urllib.request.urlopen(req, timeout=20)
+            except urllib.error.URLError as exc:
+                reason = str(exc.reason).lower()
+                if "tunnel connection failed" not in reason:
+                    raise
+                return direct_opener.open(req, timeout=20)
         token_request = urllib.request.Request(
             f"{paypal_base_url()}/v1/oauth2/token",
             data=b"grant_type=client_credentials",
@@ -115,7 +128,7 @@ def create_app():
             method="POST",
         )
         try:
-            with urllib.request.urlopen(token_request, timeout=20) as response:
+            with open_request(token_request) as response:
                 token_payload = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             details = exc.read().decode("utf-8")
@@ -140,7 +153,7 @@ def create_app():
             method=method,
         )
         try:
-            with urllib.request.urlopen(api_request, timeout=20) as response:
+            with open_request(api_request) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             details = exc.read().decode("utf-8")
