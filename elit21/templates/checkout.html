@@ -84,6 +84,7 @@
     const cardWrapper = document.getElementById('card-fields-wrapper');
     const cardPayButton = document.getElementById('card-pay-button');
     let pendingLocalOrderId = null;
+    let pendingPaypalOrderId = null;
     let pendingApproveUrl = null;
     let createOrderRequest = null;
     const debugEnabled = {{ 'true' if paypal_debug_enabled else 'false' }} || new URLSearchParams(window.location.search).get('debug_paypal') === '1' || window.localStorage.getItem('elit21_paypal_debug') === '1';
@@ -170,10 +171,11 @@
             throw new Error('create-order-failed');
           }
           pendingLocalOrderId = data.local_order_id;
+          pendingPaypalOrderId = data.id;
           pendingApproveUrl = data.approve_url || null;
-          debugLog('create-server-order:success', { pendingLocalOrderId, has_approve_url: !!pendingApproveUrl });
+          debugLog('create-server-order:success', { pendingLocalOrderId, pendingPaypalOrderId, has_approve_url: !!pendingApproveUrl });
           window.localStorage.setItem('elit21_checkout_order_id', data.local_order_id);
-          return data.id;
+          return pendingPaypalOrderId;
         })
         .finally(() => {
           createOrderRequest = null;
@@ -217,6 +219,7 @@
             throw new Error('capture-failed');
           }
           pendingLocalOrderId = null;
+          pendingPaypalOrderId = null;
           window.localStorage.removeItem('elit21_checkout_order_id');
           debugLog('capture-server-order:success', { redirect_url: payload.redirect_url });
           window.location.href = payload.redirect_url;
@@ -269,14 +272,35 @@
             setStatus('Merci de compléter les informations de livraison.', true);
             return actions.reject();
           }
-          return actions.resolve();
+          debugLog('paypal-buttons:onClick:create-order-preload', {});
+          return createServerOrder()
+            .then(function() {
+              debugLog('paypal-buttons:onClick:create-order-preload-success', {
+                pendingPaypalOrderId,
+                hasPendingApproveUrl: !!pendingApproveUrl
+              });
+              return actions.resolve();
+            })
+            .catch(function(err) {
+              debugLog('paypal-buttons:onClick:create-order-preload-failed', {
+                message: err && err.message ? err.message : String(err)
+              });
+              return actions.reject();
+            });
         },
-        createOrder: createServerOrder,
+        createOrder: function() {
+          if (pendingPaypalOrderId) {
+            debugLog('paypal-buttons:createOrder:reuse-pending-order', { pendingPaypalOrderId });
+            return Promise.resolve(pendingPaypalOrderId);
+          }
+          return createServerOrder();
+        },
         onApprove: function(data) {
           debugLog('paypal-buttons:onApprove', { orderID: data && data.orderID });
           return captureServerOrder(data.orderID);
         },
         onCancel: function() {
+          pendingPaypalOrderId = null;
           debugLog('paypal-buttons:onCancel', {});
           setStatus('Paiement annulé. Vous pouvez réessayer.', true);
         },
@@ -290,6 +314,7 @@
             return;
           }
           if (isPopupFailure(err) && pendingApproveUrl) {
+            pendingPaypalOrderId = null;
             setStatus('Le popup PayPal a été bloqué. Redirection vers PayPal en cours...', true);
             debugLog('paypal-buttons:popup-fallback-redirect', { pendingApproveUrl });
             window.location.href = pendingApproveUrl;
@@ -303,6 +328,7 @@
                 if (!pendingApproveUrl) {
                   throw new Error('missing-approve-url');
                 }
+                pendingPaypalOrderId = null;
                 debugLog('paypal-buttons:popup-fallback-redirect-after-create', { pendingApproveUrl });
                 window.location.href = pendingApproveUrl;
               })
