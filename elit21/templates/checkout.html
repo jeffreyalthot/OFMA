@@ -5,8 +5,6 @@
   <div class="checkout-form">
     <h2>Checkout sécurisé</h2>
     <p>Complétez vos coordonnées puis confirmez le paiement via PayPal ou carte crédit/débit.</p>
-    <div class="badge">Client PayPal: {{ paypal_client_id if paypal_client_id else 'Configurer' }}</div>
-
     <form id="checkout-form" class="order-form">
       <label for="customer_name">Nom et prénom</label>
       <input id="customer_name" name="customer_name" placeholder="Nom complet du client" required />
