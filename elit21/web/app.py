@@ -654,7 +654,7 @@ def create_app():
                     "description": f"Couleur: {item['color']} / Taille: {item['size']}"[:127],
                     "sku": f"{item['product']['id']}-{item['color']}-{item['size']}"[:127],
                     "unit_amount": {
-                        "currency_code": "EUR",
+                        "currency_code": "CAD",
                         "value": money_as_text(unit_amount),
                     },
                     "quantity": str(item["quantity"]),
@@ -747,15 +747,15 @@ def create_app():
                             "reference_id": str(order_id),
                             "invoice_id": f"ELIT21-{order_id}",
                             "amount": {
-                                "currency_code": "EUR",
+                                "currency_code": "CAD",
                                 "value": money_as_text(total_money),
                                 "breakdown": {
                                     "item_total": {
-                                        "currency_code": "EUR",
+                                        "currency_code": "CAD",
                                         "value": money_as_text(subtotal_money),
                                     },
                                     "shipping": {
-                                        "currency_code": "EUR",
+                                        "currency_code": "CAD",
                                         "value": money_as_text(shipping_fee_money),
                                     },
                                 },
@@ -921,10 +921,10 @@ def create_app():
                 reference_id,
             )
             return {"error": "Commande PayPal incohérente (reference)."}, 409
-        if capture_currency and capture_currency != "EUR":
+        if capture_currency and capture_currency != "CAD":
             conn.close()
             app.logger.error(
-                "[paypal-debug] capture_order rejected: currency mismatch local_order_id=%s expected=EUR got=%s",
+                "[paypal-debug] capture_order rejected: currency mismatch local_order_id=%s expected=CAD got=%s",
                 local_order_id,
                 capture_currency,
             )

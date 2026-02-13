@@ -48,7 +48,7 @@ SHIPPING_FEE=9.99
 Notes:
 - Les webhooks ne sont pas requis pour ce flux: la confirmation passe par `create-paypal-order` puis `capture-paypal-order`.
 - Le backend configure aussi `return_url` et `cancel_url` pour couvrir le fallback redirection (popup bloqué).
-- Le backend vérifie à la capture: statut `COMPLETED`, `reference_id` de la commande, devise `EUR` et montant attendu.
+- Le backend vérifie à la capture: statut `COMPLETED`, `reference_id` de la commande, devise `CAD` et montant attendu.
 - Si `PAYPAL_ENV` est mauvais mais les clés sont valides, le backend tente automatiquement l'autre environnement (désactivable via `PAYPAL_ENV_AUTO_FALLBACK=0`).
 
 ## Structure

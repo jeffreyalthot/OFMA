@@ -5,7 +5,7 @@
   <div>
     <h2>{{ product['name'] }}</h2>
     <p>{{ product['description'] }}</p>
-    <div class="price">€ {{ '%.2f'|format(product['price']) }}</div>
+    <div class="price">$ (CAD) {{ '%.2f'|format(product['price']) }}</div>
     <p><strong>Stock:</strong> {{ product['stock'] }}</p>
     <div class="product-options">
       <label for="color"><strong>Couleur</strong></label>

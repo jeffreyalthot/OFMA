@@ -12,7 +12,7 @@
             <h3>{{ item.product['name'] }}</h3>
             <p class="muted">{{ item.product['description'][:100] }}{% if item.product['description']|length > 100 %}...{% endif %}</p>
             <p class="muted">Couleur: {{ item.color }} | Taille: {{ item.size }}</p>
-            <p class="price">€ {{ '%.2f'|format(item.product['price']) }}</p>
+            <p class="price">$ (CAD) {{ '%.2f'|format(item.product['price']) }}</p>
           </div>
           <div class="cart-actions">
             <form method="post" action="{{ url_for('update_cart_item') }}">
@@ -26,7 +26,7 @@
             </form>
           </div>
           <div class="cart-line-total">
-            € {{ '%.2f'|format(item.line_total) }}
+            $ (CAD) {{ '%.2f'|format(item.line_total) }}
           </div>
         </div>
       {% endfor %}
@@ -35,15 +35,15 @@
       <h3>Facture client</h3>
       <div class="summary-row">
         <span>Sous-total</span>
-        <span>€ {{ '%.2f'|format(subtotal) }}</span>
+        <span>$ (CAD) {{ '%.2f'|format(subtotal) }}</span>
       </div>
       <div class="summary-row">
         <span>Livraison</span>
-        <span>€ {{ '%.2f'|format(shipping_fee) }}</span>
+        <span>$ (CAD) {{ '%.2f'|format(shipping_fee) }}</span>
       </div>
       <div class="summary-row total">
         <span>Total TTC</span>
-        <span>€ {{ '%.2f'|format(total) }}</span>
+        <span>$ (CAD) {{ '%.2f'|format(total) }}</span>
       </div>
       <a class="cta" href="{{ url_for('checkout') }}">Passer au paiement</a>
     </div>

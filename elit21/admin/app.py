@@ -188,7 +188,7 @@ class AdminApp:
         self.product_description = Text(form_frame, width=40, height=6)
         self.product_description.pack(anchor="w")
 
-        ttk.Label(form_frame, text="Prix (€)").pack(anchor="w", pady=(10, 0))
+        ttk.Label(form_frame, text="Prix ($ CAD)").pack(anchor="w", pady=(10, 0))
         ttk.Entry(form_frame, textvariable=self.product_price, width=20).pack(anchor="w")
 
         ttk.Label(form_frame, text="Stock").pack(anchor="w", pady=(10, 0))
@@ -631,7 +631,7 @@ class AdminApp:
 
         self.dashboard_cards["Total commandes"].config(text=str(total_orders))
         self.dashboard_cards["Commandes en traitement"].config(text=str(processing_orders))
-        self.dashboard_cards["Chiffre d'affaires"].config(text=f"€ {revenue:.2f}")
+        self.dashboard_cards["Chiffre d'affaires"].config(text=f"$ (CAD) {revenue:.2f}")
         self.dashboard_cards["Articles actifs"].config(text=str(active_products))
 
         self.draw_sales_and_orders_chart(last_7_days)
@@ -686,7 +686,7 @@ class AdminApp:
         canvas.create_rectangle(right - 140, top + 2, right - 128, top + 14, fill="#4a90e2", outline="")
         canvas.create_text(right - 122, top + 8, text="Commandes", anchor="w", font=("Segoe UI", 8))
         canvas.create_rectangle(right - 70, top + 2, right - 58, top + 14, fill="#27ae60", outline="")
-        canvas.create_text(right - 52, top + 8, text="Ventes (€)", anchor="w", font=("Segoe UI", 8))
+        canvas.create_text(right - 52, top + 8, text="Ventes ($ CAD)", anchor="w", font=("Segoe UI", 8))
 
     def draw_revenue_pie_chart(self, rows) -> None:
         data = [item for item in self._normalized_7_days(rows) if item["revenue"] > 0]
@@ -823,7 +823,7 @@ class AdminApp:
                     product["id"],
                     product["name"],
                     product["status"],
-                    f"€ {product['price']:.2f}",
+                    f"$ (CAD) {product['price']:.2f}",
                     product["stock"],
                 ),
             )
@@ -978,7 +978,7 @@ class AdminApp:
                     order["customer_name"],
                     order["status"],
                     order["payment_status"],
-                    f"€ {order['total']:.2f}",
+                    f"$ (CAD) {order['total']:.2f}",
                     order["created_at"],
                 ),
             )
@@ -1012,7 +1012,7 @@ class AdminApp:
             self.transactions_tree.insert(
                 "",
                 "end",
-                values=(tx["id"], tx["order_id"], f"€ {tx['total']:.2f}", tx["completed_at"]),
+                values=(tx["id"], tx["order_id"], f"$ (CAD) {tx['total']:.2f}", tx["completed_at"]),
             )
 
     def show_order_detail(self, _event=None) -> None:
@@ -1039,7 +1039,7 @@ class AdminApp:
                 values=(
                     item["product_name"],
                     item["quantity"],
-                    f"€ {item['price']:.2f}",
+                    f"$ (CAD) {item['price']:.2f}",
                     item["color"] or "",
                     item["size"] or "",
                 ),
@@ -1051,8 +1051,8 @@ class AdminApp:
             f"Date achat: {order['created_at']}\n"
             f"Statut: {order['status']}\n"
             f"Paiement: {order['payment_status']}\n"
-            f"Livraison: € {order['shipping_fee']:.2f}\n"
-            f"Total TTC: € {order['total']:.2f}"
+            f"Livraison: $ (CAD) {order['shipping_fee']:.2f}\n"
+            f"Total TTC: $ (CAD) {order['total']:.2f}"
         )
         self.order_address_label.config(text=self.format_customer_address(order))
         self.order_detail_label.config(text=detail)

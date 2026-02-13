@@ -44,7 +44,7 @@
         <div class="card-content">
           <h3>{{ product['name'] }}</h3>
           <p>{{ product['description'][:120] }}{% if product['description']|length > 120 %}...{% endif %}</p>
-          <div class="price">€ {{ '%.2f'|format(product['price']) }}</div>
+          <div class="price">$ (CAD) {{ '%.2f'|format(product['price']) }}</div>
           <a href="{{ url_for('product_detail', product_id=product['id']) }}">Voir l'article</a>
         </div>
       </div>
