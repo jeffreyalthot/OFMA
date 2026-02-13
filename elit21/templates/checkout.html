@@ -260,8 +260,17 @@
       });
     }
 
-    function renderPayPalButtons() {
-      const buttons = paypal.Buttons({
+    function renderPayPalButtons(paypalSdk) {
+      if (!paypalSdk || !paypalSdk.Buttons) {
+        debugLog('paypal-buttons:init-failed', {
+          reason: 'paypal sdk unavailable',
+          hasPayPalObject: !!paypalSdk
+        });
+        setStatus('Impossible d’initialiser PayPal. Réessayez dans quelques instants.', true);
+        return;
+      }
+
+      const buttons = paypalSdk.Buttons({
         style: { shape: 'pill', color: 'gold', layout: 'vertical', label: 'paypal' },
         onClick: function(data, actions) {
           logPopupContext('paypal-buttons:onClick', {
@@ -272,21 +281,8 @@
             setStatus('Merci de compléter les informations de livraison.', true);
             return actions.reject();
           }
-          debugLog('paypal-buttons:onClick:create-order-preload', {});
-          return createServerOrder()
-            .then(function() {
-              debugLog('paypal-buttons:onClick:create-order-preload-success', {
-                pendingPaypalOrderId,
-                hasPendingApproveUrl: !!pendingApproveUrl
-              });
-              return actions.resolve();
-            })
-            .catch(function(err) {
-              debugLog('paypal-buttons:onClick:create-order-preload-failed', {
-                message: err && err.message ? err.message : String(err)
-              });
-              return actions.reject();
-            });
+          debugLog('paypal-buttons:onClick:validated', {});
+          return actions.resolve();
         },
         createOrder: function() {
           if (pendingPaypalOrderId) {
@@ -364,8 +360,8 @@
           setStatus('Impossible d’afficher le bouton PayPal. Réessayez.', true);
         });
 
-      if (paypal.CardFields) {
-        const cardFields = paypal.CardFields({
+      if (paypalSdk.CardFields) {
+        const cardFields = paypalSdk.CardFields({
           createOrder: createServerOrder,
           onApprove: function(data) {
             debugLog('paypal-card:onApprove', { orderID: data && data.orderID });
@@ -407,9 +403,9 @@
 
     setStatus('Chargement sécurisé du module PayPal...', false);
     loadPayPalSdk()
-      .then(function() {
+      .then(function(paypalSdk) {
         setStatus('', false);
-        renderPayPalButtons();
+        renderPayPalButtons(paypalSdk);
       })
       .catch(function(error) {
         if (error && error.message === 'paypal-not-configured') {
