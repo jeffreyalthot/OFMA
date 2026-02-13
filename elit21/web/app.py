@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import os
 import urllib.error
 import urllib.request
@@ -67,6 +68,7 @@ def create_app():
         template_folder=str(os.path.join(os.path.dirname(__file__), "..", "templates")),
     )
     app.secret_key = os.getenv("ELIT21_SECRET", "elit21-secret")
+    app.logger.setLevel(logging.INFO)
 
     init_db()
 
@@ -469,10 +471,18 @@ def create_app():
             return format(value, ".2f")
 
         shipping_data = collect_shipping_data(request.json or {})
+        app.logger.info(
+            "[paypal-debug] create_order requested user_id=%s cart_size=%s shipping_city=%s",
+            session.get("user_id"),
+            len(get_cart()),
+            (request.json or {}).get("city", ""),
+        )
         if not shipping_data:
+            app.logger.warning("[paypal-debug] create_order rejected: incomplete shipping data")
             return jsonify({"error": "Adresse de livraison incomplète."}), 400
         items, subtotal = load_cart_items()
         if not items:
+            app.logger.warning("[paypal-debug] create_order rejected: empty cart")
             return jsonify({"error": "Votre panier est vide."}), 400
         subtotal_money = to_money(subtotal)
         shipping_fee_money = to_money(SHIPPING_FEE)
@@ -500,6 +510,7 @@ def create_app():
         ).fetchone()
         if not user:
             conn.close()
+            app.logger.warning("[paypal-debug] create_order rejected: missing user for session")
             return jsonify({"error": "Compte utilisateur introuvable."}), 404
         cursor = conn.cursor()
         cursor.execute(
@@ -539,6 +550,13 @@ def create_app():
             ).fetchone()
             if not inventory or inventory["quantity"] < item["quantity"]:
                 conn.close()
+                app.logger.warning(
+                    "[paypal-debug] create_order rejected: stock issue product_id=%s color=%s size=%s needed=%s",
+                    product["id"],
+                    item["color"],
+                    item["size"],
+                    item["quantity"],
+                )
                 return jsonify({"error": "Stock insuffisant pour finaliser la commande."}), 409
             cursor.execute(
                 """
@@ -556,6 +574,11 @@ def create_app():
                 ),
             )
         try:
+            app.logger.info(
+                "[paypal-debug] paypal order creation started local_order_id=%s total=%s",
+                order_id,
+                money_as_text(total_money),
+            )
             paypal_order = paypal_request(
                 "/v2/checkout/orders",
                 method="POST",
@@ -592,11 +615,20 @@ def create_app():
         except RuntimeError as exc:
             conn.rollback()
             conn.close()
+            app.logger.exception(
+                "[paypal-debug] paypal order creation failed local_order_id=%s",
+                order_id,
+            )
             return jsonify({"error": str(exc)}), 502
         paypal_order_id = paypal_order.get("id")
         if not paypal_order_id:
             conn.rollback()
             conn.close()
+            app.logger.error(
+                "[paypal-debug] paypal order creation invalid response local_order_id=%s payload=%s",
+                order_id,
+                paypal_order,
+            )
             return jsonify({"error": "Réponse PayPal invalide."}), 502
         cursor.execute(
             "UPDATE orders SET payment_status = ? WHERE id = ?",
@@ -609,6 +641,12 @@ def create_app():
             if link.get("rel") == "approve":
                 approval_url = link.get("href")
                 break
+        app.logger.info(
+            "[paypal-debug] paypal order created local_order_id=%s paypal_order_id=%s has_approve_url=%s",
+            order_id,
+            paypal_order_id,
+            bool(approval_url),
+        )
         return jsonify(
             {
                 "id": paypal_order_id,
@@ -623,7 +661,14 @@ def create_app():
         payload = request.json or {}
         paypal_order_id = (payload.get("paypal_order_id") or "").strip()
         local_order_id = payload.get("local_order_id")
+        app.logger.info(
+            "[paypal-debug] capture_order requested user_id=%s local_order_id=%s paypal_order_id=%s",
+            session.get("user_id"),
+            local_order_id,
+            paypal_order_id,
+        )
         if not paypal_order_id:
+            app.logger.warning("[paypal-debug] capture_order rejected: missing paypal_order_id")
             return jsonify({"error": "Paramètres de paiement manquants."}), 400
         conn = get_connection()
         current_user = conn.execute(
@@ -631,6 +676,7 @@ def create_app():
         ).fetchone()
         if not current_user:
             conn.close()
+            app.logger.warning("[paypal-debug] capture_order rejected: no current user")
             return jsonify({"error": "Accès non autorisé à cette commande."}), 403
         order = None
         if local_order_id:
@@ -651,12 +697,22 @@ def create_app():
             ).fetchone()
         if not order:
             conn.close()
+            app.logger.warning("[paypal-debug] capture_order rejected: order not found")
             return jsonify({"error": "Commande introuvable."}), 404
         if order["customer_email"] != current_user["email"]:
             conn.close()
+            app.logger.warning(
+                "[paypal-debug] capture_order rejected: email mismatch local_order_id=%s",
+                order["id"],
+            )
             return jsonify({"error": "Accès non autorisé à cette commande."}), 403
         if f"paypal_order:{paypal_order_id}" != order["payment_status"]:
             conn.close()
+            app.logger.warning(
+                "[paypal-debug] capture_order rejected: payment status mismatch local_order_id=%s status=%s",
+                order["id"],
+                order["payment_status"],
+            )
             return jsonify({"error": "Commande PayPal incohérente."}), 409
         local_order_id = order["id"]
         try:
@@ -667,6 +723,11 @@ def create_app():
             )
         except RuntimeError as exc:
             conn.close()
+            app.logger.exception(
+                "[paypal-debug] paypal capture failed local_order_id=%s paypal_order_id=%s",
+                local_order_id,
+                paypal_order_id,
+            )
             return jsonify({"error": str(exc)}), 502
         status = capture.get("status")
         purchase_units = capture.get("purchase_units") or []
@@ -678,6 +739,13 @@ def create_app():
                 capture_id = captures[0].get("id")
         if status != "COMPLETED":
             conn.close()
+            app.logger.error(
+                "[paypal-debug] paypal capture incomplete local_order_id=%s paypal_order_id=%s status=%s payload=%s",
+                local_order_id,
+                paypal_order_id,
+                status,
+                capture,
+            )
             return jsonify({"error": "Le paiement PayPal n'est pas confirmé."}), 409
         order_items = conn.execute(
             "SELECT * FROM order_items WHERE order_id = ?",
@@ -694,6 +762,11 @@ def create_app():
             ).fetchone()
             if not inventory or inventory["quantity"] < item["quantity"]:
                 conn.close()
+                app.logger.warning(
+                    "[paypal-debug] capture_order rejected: stock issue post-capture local_order_id=%s product_id=%s",
+                    local_order_id,
+                    item["product_id"],
+                )
                 return jsonify({"error": "Stock insuffisant après confirmation de paiement."}), 409
         cursor = conn.cursor()
         for item in order_items:
@@ -727,6 +800,12 @@ def create_app():
         )
         conn.commit()
         conn.close()
+        app.logger.info(
+            "[paypal-debug] capture_order completed local_order_id=%s paypal_order_id=%s capture_id=%s",
+            local_order_id,
+            paypal_order_id,
+            capture_id,
+        )
         session["cart"] = {}
         return jsonify(
             {

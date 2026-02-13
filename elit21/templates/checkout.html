@@ -85,10 +85,34 @@
     const cardPayButton = document.getElementById('card-pay-button');
     let pendingLocalOrderId = null;
     let pendingApproveUrl = null;
+    const debugEnabled = new URLSearchParams(window.location.search).get('debug_paypal') === '1' || window.localStorage.getItem('elit21_paypal_debug') === '1';
+
+    function debugLog(eventName, details) {
+      if (!debugEnabled) return;
+      const payload = {
+        at: new Date().toISOString(),
+        event: eventName,
+        details: details || {}
+      };
+      window.__paypalDebugLog = window.__paypalDebugLog || [];
+      window.__paypalDebugLog.push(payload);
+      console.debug('[ELIT21][PayPal]', eventName, payload.details);
+    }
+
+    if (debugEnabled) {
+      window.localStorage.setItem('elit21_paypal_debug', '1');
+      debugLog('debug-mode-enabled', { href: window.location.href });
+      window.addEventListener('unhandledrejection', function(evt) {
+        debugLog('window.unhandledrejection', {
+          reason: evt && evt.reason ? String(evt.reason.message || evt.reason) : 'unknown'
+        });
+      });
+    }
 
     function setStatus(message, isError) {
       statusEl.textContent = message || '';
       statusEl.className = isError ? 'flash' : 'muted';
+      debugLog('status-updated', { message: message || '', isError: !!isError });
     }
 
     function formDataAsJson() {
@@ -105,6 +129,7 @@
         return Promise.reject(new Error('invalid-form'));
       }
       const payload = formDataAsJson();
+      debugLog('create-server-order:start', { shipping_city: payload.city, shipping_country: payload.country });
       setStatus('Création de la commande PayPal en cours...', false);
       return fetch("{{ url_for('create_paypal_order') }}", {
         method: 'POST',
@@ -113,12 +138,14 @@
       })
         .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
         .then(({ ok, data }) => {
+          debugLog('create-server-order:response', { ok: ok, has_order_id: !!data.id, local_order_id: data.local_order_id, error: data.error || null });
           if (!ok || !data.id) {
             setStatus(data.error || 'Erreur lors de la préparation du paiement.', true);
             throw new Error('create-order-failed');
           }
           pendingLocalOrderId = data.local_order_id;
           pendingApproveUrl = data.approve_url || null;
+          debugLog('create-server-order:success', { pendingLocalOrderId, has_approve_url: !!pendingApproveUrl });
           window.localStorage.setItem('elit21_checkout_order_id', data.local_order_id);
           return data.id;
         });
@@ -131,6 +158,7 @@
 
     function captureServerOrder(paypalOrderId) {
       const localOrderId = pendingLocalOrderId || window.localStorage.getItem('elit21_checkout_order_id');
+      debugLog('capture-server-order:start', { paypalOrderId, localOrderId });
       setStatus('Validation du paiement...', false);
       return fetch("{{ url_for('capture_paypal_order') }}", {
         method: 'POST',
@@ -142,32 +170,46 @@
       })
         .then((response) => response.json().then((payload) => ({ ok: response.ok, payload })))
         .then(({ ok, payload }) => {
+          debugLog('capture-server-order:response', { ok: ok, payload_ok: payload.ok, error: payload.error || null, redirect_url: payload.redirect_url || null });
           if (!ok || !payload.ok) {
             setStatus(payload.error || 'Paiement non confirmé.', true);
             throw new Error('capture-failed');
           }
           pendingLocalOrderId = null;
           window.localStorage.removeItem('elit21_checkout_order_id');
+          debugLog('capture-server-order:success', { redirect_url: payload.redirect_url });
           window.location.href = payload.redirect_url;
         });
     }
 
     function loadPayPalSdk() {
       if (window.paypal) {
+        debugLog('paypal-sdk:already-loaded', {});
         return Promise.resolve(window.paypal);
       }
       if (!{{ 'true' if paypal_configured else 'false' }}) {
         return Promise.reject(new Error('paypal-not-configured'));
       }
       const sdkScript = document.createElement('script');
-      sdkScript.src = 'https://www.paypal.com/sdk/js?client-id={{ paypal_client_id }}&components=buttons,card-fields&currency=EUR&intent=capture';
+      const sdkUrl = new URL('https://www.paypal.com/sdk/js');
+      sdkUrl.searchParams.set('client-id', '{{ paypal_client_id }}');
+      sdkUrl.searchParams.set('components', 'buttons,card-fields');
+      sdkUrl.searchParams.set('currency', 'EUR');
+      sdkUrl.searchParams.set('intent', 'capture');
+      if (debugEnabled) {
+        sdkUrl.searchParams.set('debug', 'true');
+      }
+      sdkScript.src = sdkUrl.toString();
       sdkScript.setAttribute('data-sdk-integration-source', 'button-factory');
       sdkScript.async = true;
+      debugLog('paypal-sdk:loading', { src: sdkScript.src });
       return new Promise(function(resolve, reject) {
         sdkScript.onload = function() {
+          debugLog('paypal-sdk:loaded', { has_paypal: !!window.paypal });
           resolve(window.paypal);
         };
         sdkScript.onerror = function() {
+          debugLog('paypal-sdk:error', {});
           reject(new Error('paypal-sdk-load-error'));
         };
         document.head.appendChild(sdkScript);
@@ -178,6 +220,7 @@
       paypal.Buttons({
         style: { shape: 'pill', color: 'gold', layout: 'vertical', label: 'paypal' },
         onClick: function(data, actions) {
+          debugLog('paypal-buttons:onClick', { fundingSource: data && data.fundingSource });
           if (!form.reportValidity()) {
             setStatus('Merci de compléter les informations de livraison.', true);
             return actions.reject();
@@ -186,17 +229,21 @@
         },
         createOrder: createServerOrder,
         onApprove: function(data) {
+          debugLog('paypal-buttons:onApprove', { orderID: data && data.orderID });
           return captureServerOrder(data.orderID);
         },
         onCancel: function() {
+          debugLog('paypal-buttons:onCancel', {});
           setStatus('Paiement annulé. Vous pouvez réessayer.', true);
         },
         onError: function(err) {
+          debugLog('paypal-buttons:onError', { message: err && err.message ? err.message : String(err) });
           if (err && err.message === 'invalid-form') {
             return;
           }
           if (isPopupFailure(err) && pendingApproveUrl) {
             setStatus('Le popup PayPal a été bloqué. Redirection vers PayPal en cours...', true);
+            debugLog('paypal-buttons:popup-fallback-redirect', { pendingApproveUrl });
             window.location.href = pendingApproveUrl;
             return;
           }
@@ -208,9 +255,11 @@
         const cardFields = paypal.CardFields({
           createOrder: createServerOrder,
           onApprove: function(data) {
+            debugLog('paypal-card:onApprove', { orderID: data && data.orderID });
             return captureServerOrder(data.orderID);
           },
           onError: function(err) {
+            debugLog('paypal-card:onError', { message: err && err.message ? err.message : String(err) });
             if (err && err.message === 'invalid-form') {
               return;
             }
@@ -219,6 +268,7 @@
         });
 
         if (cardFields.isEligible()) {
+          debugLog('paypal-card:is-eligible', {});
           cardWrapper.hidden = false;
           cardFields.NumberField().render('#card-number');
           cardFields.ExpiryField().render('#card-expiry');
@@ -230,11 +280,14 @@
             }
             setStatus('Validation du paiement carte...', false);
             cardFields.submit().catch(function(err) {
+              debugLog('paypal-card:submit-error', { message: err && err.message ? err.message : String(err) });
               if (err && err.message !== 'invalid-form') {
                 setStatus('Paiement carte refusé. Vérifiez les informations saisies.', true);
               }
             });
           });
+        } else {
+          debugLog('paypal-card:not-eligible', {});
         }
       }
     }
