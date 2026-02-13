@@ -86,7 +86,7 @@
     let pendingLocalOrderId = null;
     let pendingApproveUrl = null;
     let createOrderRequest = null;
-    const debugEnabled = new URLSearchParams(window.location.search).get('debug_paypal') === '1' || window.localStorage.getItem('elit21_paypal_debug') === '1';
+    const debugEnabled = {{ 'true' if paypal_debug_enabled else 'false' }} || new URLSearchParams(window.location.search).get('debug_paypal') === '1' || window.localStorage.getItem('elit21_paypal_debug') === '1';
 
     function debugLog(eventName, details) {
       if (!debugEnabled) return;
@@ -310,6 +310,10 @@
                 debugLog('paypal-buttons:popup-fallback-failed', { message: fallbackError && fallbackError.message ? fallbackError.message : String(fallbackError) });
                 setStatus('Impossible d’ouvrir PayPal automatiquement. Réessayez.', true);
               });
+            return;
+          }
+          if (debugEnabled && err) {
+            setStatus('Erreur PayPal: ' + (err.message || String(err)), true);
             return;
           }
           setStatus('Une erreur est survenue avec PayPal. Réessayez.', true);

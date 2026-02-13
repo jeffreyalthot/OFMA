@@ -50,6 +50,7 @@ PAYPAL_CLIENT_SECRET = os.getenv("PAYPAL_CLIENT_SECRET") or os.getenv(
     "PAYPAL_SECRET_KEY_1", ""
 )
 PAYPAL_ENV = os.getenv("PAYPAL_ENV", "sandbox").lower()
+PAYPAL_DEBUG = os.getenv("PAYPAL_DEBUG", "0").strip().lower() in {"1", "true", "yes", "on"}
 SHIPPING_FEE = float(os.getenv("SHIPPING_FEE", "9.99"))
 
 
@@ -68,7 +69,7 @@ def create_app():
         template_folder=str(os.path.join(os.path.dirname(__file__), "..", "templates")),
     )
     app.secret_key = os.getenv("ELIT21_SECRET", "elit21-secret")
-    app.logger.setLevel(logging.INFO)
+    app.logger.setLevel(logging.DEBUG if PAYPAL_DEBUG else logging.INFO)
 
     init_db()
 
@@ -102,6 +103,13 @@ def create_app():
         is_configured, config_error = ensure_paypal_configured()
         if not is_configured:
             raise RuntimeError(config_error)
+        app.logger.debug(
+            "[paypal-debug] paypal_request start method=%s path=%s payload_keys=%s env=%s",
+            method,
+            path,
+            sorted(list((payload or {}).keys())),
+            PAYPAL_ENV,
+        )
         auth_value = f"{PAYPAL_CLIENT_ID}:{PAYPAL_CLIENT_SECRET}".encode("utf-8")
         basic_token = base64.b64encode(auth_value).decode("ascii")
         # Some deployments define HTTPS proxy variables that break PayPal with
@@ -130,10 +138,17 @@ def create_app():
         try:
             with open_request(token_request) as response:
                 token_payload = json.loads(response.read().decode("utf-8"))
+                app.logger.debug(
+                    "[paypal-debug] auth token received scope=%s expires_in=%s",
+                    token_payload.get("scope"),
+                    token_payload.get("expires_in"),
+                )
         except urllib.error.HTTPError as exc:
             details = exc.read().decode("utf-8")
+            app.logger.error("[paypal-debug] auth http error status=%s body=%s", exc.code, details)
             raise RuntimeError(f"PayPal auth échouée: {details}") from exc
         except urllib.error.URLError as exc:
+            app.logger.error("[paypal-debug] auth network error reason=%s", exc.reason)
             raise RuntimeError(f"Connexion PayPal impossible: {exc.reason}") from exc
         access_token = token_payload.get("access_token")
         if not access_token:
@@ -154,11 +169,32 @@ def create_app():
         )
         try:
             with open_request(api_request) as response:
-                return json.loads(response.read().decode("utf-8"))
+                response_payload = json.loads(response.read().decode("utf-8"))
+                app.logger.debug(
+                    "[paypal-debug] paypal_request success method=%s path=%s status=%s response_keys=%s",
+                    method,
+                    path,
+                    getattr(response, "status", "unknown"),
+                    sorted(list(response_payload.keys())),
+                )
+                return response_payload
         except urllib.error.HTTPError as exc:
             details = exc.read().decode("utf-8")
+            app.logger.error(
+                "[paypal-debug] api http error method=%s path=%s status=%s body=%s",
+                method,
+                path,
+                exc.code,
+                details,
+            )
             raise RuntimeError(f"PayPal API échouée: {details}") from exc
         except urllib.error.URLError as exc:
+            app.logger.error(
+                "[paypal-debug] api network error method=%s path=%s reason=%s",
+                method,
+                path,
+                exc.reason,
+            )
             raise RuntimeError(f"Connexion API PayPal impossible: {exc.reason}") from exc
 
     def collect_shipping_data(form_data):
@@ -467,6 +503,7 @@ def create_app():
             "checkout.html",
             paypal_client_id=PAYPAL_CLIENT_ID,
             paypal_env=PAYPAL_ENV,
+            paypal_debug_enabled=PAYPAL_DEBUG,
             items=items,
             subtotal=subtotal,
             shipping_fee=SHIPPING_FEE,
