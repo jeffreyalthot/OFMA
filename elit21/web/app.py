@@ -45,19 +45,38 @@ def load_env_file() -> None:
 load_env_file()
 
 
-PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID", "demo-client-id")
-PAYPAL_CLIENT_SECRET = os.getenv("PAYPAL_CLIENT_SECRET") or os.getenv(
-    "PAYPAL_SECRET_KEY_1", ""
-)
-PAYPAL_ENV = os.getenv("PAYPAL_ENV", "sandbox").lower()
-PAYPAL_DEBUG = os.getenv("PAYPAL_DEBUG", "0").strip().lower() in {"1", "true", "yes", "on"}
+def paypal_debug_enabled() -> bool:
+    return os.getenv("PAYPAL_DEBUG", "0").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def get_paypal_settings() -> dict[str, str]:
+    # Read configuration at runtime so .env / process-level updates are used
+    # without importing stale values.
+    client_id = os.getenv("PAYPAL_CLIENT_ID", "demo-client-id").strip()
+    client_secret = (
+        os.getenv("PAYPAL_CLIENT_SECRET")
+        or os.getenv("PAYPAL_SECRET_KEY_1")
+        or ""
+    ).strip()
+    return {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "env": os.getenv("PAYPAL_ENV", "sandbox").strip().lower(),
+    }
+
+
 SHIPPING_FEE = float(os.getenv("SHIPPING_FEE", "9.99"))
 
 
-def paypal_base_url() -> str:
+def paypal_base_url(paypal_env: str) -> str:
     return (
         "https://api-m.paypal.com"
-        if PAYPAL_ENV == "live"
+        if paypal_env == "live"
         else "https://api-m.sandbox.paypal.com"
     )
 
@@ -69,7 +88,7 @@ def create_app():
         template_folder=str(os.path.join(os.path.dirname(__file__), "..", "templates")),
     )
     app.secret_key = os.getenv("ELIT21_SECRET", "elit21-secret")
-    app.logger.setLevel(logging.DEBUG if PAYPAL_DEBUG else logging.INFO)
+    app.logger.setLevel(logging.DEBUG if paypal_debug_enabled() else logging.INFO)
 
     init_db()
 
@@ -93,24 +112,39 @@ def create_app():
         return sum(get_cart().values())
 
     def ensure_paypal_configured() -> tuple[bool, str]:
-        if not PAYPAL_CLIENT_ID or PAYPAL_CLIENT_ID == "demo-client-id":
+        paypal_settings = get_paypal_settings()
+        if (
+            not paypal_settings["client_id"]
+            or paypal_settings["client_id"] == "demo-client-id"
+        ):
             return False, "Client PayPal non configuré."
-        if not PAYPAL_CLIENT_SECRET:
+        if not paypal_settings["client_secret"]:
             return False, "Secret PayPal non configuré."
         return True, ""
+
+    def credential_fingerprint(raw_value: str) -> str:
+        if not raw_value:
+            return "empty"
+        return hashlib.sha256(raw_value.encode("utf-8")).hexdigest()[:10]
 
     def paypal_request(path: str, method: str = "GET", payload: dict | None = None):
         is_configured, config_error = ensure_paypal_configured()
         if not is_configured:
             raise RuntimeError(config_error)
+        paypal_settings = get_paypal_settings()
+        paypal_env = paypal_settings["env"]
+        paypal_client_id = paypal_settings["client_id"]
+        paypal_client_secret = paypal_settings["client_secret"]
         app.logger.debug(
-            "[paypal-debug] paypal_request start method=%s path=%s payload_keys=%s env=%s",
+            "[paypal-debug] paypal_request start method=%s path=%s payload_keys=%s env=%s client_id_fp=%s secret_fp=%s",
             method,
             path,
             sorted(list((payload or {}).keys())),
-            PAYPAL_ENV,
+            paypal_env,
+            credential_fingerprint(paypal_client_id),
+            credential_fingerprint(paypal_client_secret),
         )
-        auth_value = f"{PAYPAL_CLIENT_ID}:{PAYPAL_CLIENT_SECRET}".encode("utf-8")
+        auth_value = f"{paypal_client_id}:{paypal_client_secret}".encode("utf-8")
         basic_token = base64.b64encode(auth_value).decode("ascii")
         # Some deployments define HTTPS proxy variables that break PayPal with
         # "Tunnel connection failed: 403 Forbidden". We keep the default network
@@ -126,7 +160,7 @@ def create_app():
                     raise
                 return direct_opener.open(req, timeout=20)
         token_request = urllib.request.Request(
-            f"{paypal_base_url()}/v1/oauth2/token",
+            f"{paypal_base_url(paypal_env)}/v1/oauth2/token",
             data=b"grant_type=client_credentials",
             headers={
                 "Authorization": f"Basic {basic_token}",
@@ -145,8 +179,19 @@ def create_app():
                 )
         except urllib.error.HTTPError as exc:
             details = exc.read().decode("utf-8")
-            app.logger.error("[paypal-debug] auth http error status=%s body=%s", exc.code, details)
-            raise RuntimeError(f"PayPal auth échouée: {details}") from exc
+            app.logger.error(
+                "[paypal-debug] auth http error status=%s env=%s client_id_fp=%s secret_fp=%s body=%s",
+                exc.code,
+                paypal_env,
+                credential_fingerprint(paypal_client_id),
+                credential_fingerprint(paypal_client_secret),
+                details,
+            )
+            raise RuntimeError(
+                "PayPal auth échouée: "
+                f"{details}. Vérifiez PAYPAL_CLIENT_ID/PAYPAL_CLIENT_SECRET "
+                f"et PAYPAL_ENV={paypal_env}."
+            ) from exc
         except urllib.error.URLError as exc:
             app.logger.error("[paypal-debug] auth network error reason=%s", exc.reason)
             raise RuntimeError(f"Connexion PayPal impossible: {exc.reason}") from exc
@@ -162,7 +207,7 @@ def create_app():
             request_data = json.dumps(payload).encode("utf-8")
             headers["Content-Type"] = "application/json"
         api_request = urllib.request.Request(
-            f"{paypal_base_url()}{path}",
+            f"{paypal_base_url(paypal_env)}{path}",
             data=request_data,
             headers=headers,
             method=method,
@@ -303,8 +348,8 @@ def create_app():
         return render_template(
             "index.html",
             products=products,
-            paypal_client_id=PAYPAL_CLIENT_ID,
-            paypal_env=PAYPAL_ENV,
+            paypal_client_id=get_paypal_settings()["client_id"],
+            paypal_env=get_paypal_settings()["env"],
         )
 
     @app.route("/product/<int:product_id>")
@@ -501,9 +546,9 @@ def create_app():
         total = subtotal + SHIPPING_FEE
         return render_template(
             "checkout.html",
-            paypal_client_id=PAYPAL_CLIENT_ID,
-            paypal_env=PAYPAL_ENV,
-            paypal_debug_enabled=PAYPAL_DEBUG,
+            paypal_client_id=get_paypal_settings()["client_id"],
+            paypal_env=get_paypal_settings()["env"],
+            paypal_debug_enabled=paypal_debug_enabled(),
             items=items,
             subtotal=subtotal,
             shipping_fee=SHIPPING_FEE,
