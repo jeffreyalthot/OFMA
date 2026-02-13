@@ -103,10 +103,31 @@
     if (debugEnabled) {
       window.localStorage.setItem('elit21_paypal_debug', '1');
       debugLog('debug-mode-enabled', { href: window.location.href });
+      window.addEventListener('error', function(evt) {
+        const target = evt && evt.target;
+        const isScriptError = target && target.tagName === 'SCRIPT';
+        debugLog('window.error', {
+          message: evt && evt.message ? evt.message : 'unknown',
+          source: evt && evt.filename ? evt.filename : null,
+          line: evt && evt.lineno ? evt.lineno : null,
+          col: evt && evt.colno ? evt.colno : null,
+          stack: evt && evt.error && evt.error.stack ? String(evt.error.stack) : null,
+          scriptSrc: isScriptError && target && target.src ? target.src : null
+        });
+      }, true);
       window.addEventListener('unhandledrejection', function(evt) {
         debugLog('window.unhandledrejection', {
           reason: evt && evt.reason ? String(evt.reason.message || evt.reason) : 'unknown'
         });
+      });
+      document.addEventListener('visibilitychange', function() {
+        debugLog('document.visibilitychange', { visibilityState: document.visibilityState });
+      });
+      window.addEventListener('focus', function() {
+        debugLog('window.focus', {});
+      });
+      window.addEventListener('blur', function() {
+        debugLog('window.blur', {});
       });
     }
 
@@ -163,6 +184,17 @@
     function isPopupFailure(err) {
       const message = ((err && err.message) || '').toLowerCase();
       return message.includes('popup') || message.includes('window') || message.includes('zoid');
+    }
+
+    function logPopupContext(originEvent, details) {
+      debugLog(originEvent, Object.assign({
+        hasPendingApproveUrl: !!pendingApproveUrl,
+        hasPendingLocalOrderId: !!pendingLocalOrderId,
+        visibilityState: document.visibilityState,
+        hasFocus: document.hasFocus(),
+        userActivationActive: !!(navigator.userActivation && navigator.userActivation.isActive),
+        userActivationHasBeenActive: !!(navigator.userActivation && navigator.userActivation.hasBeenActive)
+      }, details || {}));
     }
 
     function captureServerOrder(paypalOrderId) {
@@ -226,10 +258,13 @@
     }
 
     function renderPayPalButtons() {
-      paypal.Buttons({
+      const buttons = paypal.Buttons({
         style: { shape: 'pill', color: 'gold', layout: 'vertical', label: 'paypal' },
         onClick: function(data, actions) {
-          debugLog('paypal-buttons:onClick', { fundingSource: data && data.fundingSource });
+          logPopupContext('paypal-buttons:onClick', {
+            fundingSource: data && data.fundingSource,
+            buttonVisible: !!(paypalContainer && paypalContainer.offsetParent)
+          });
           if (!form.reportValidity()) {
             setStatus('Merci de compléter les informations de livraison.', true);
             return actions.reject();
@@ -246,7 +281,11 @@
           setStatus('Paiement annulé. Vous pouvez réessayer.', true);
         },
         onError: function(err) {
-          debugLog('paypal-buttons:onError', { message: err && err.message ? err.message : String(err) });
+          logPopupContext('paypal-buttons:onError', {
+            message: err && err.message ? err.message : String(err),
+            stack: err && err.stack ? String(err.stack) : null,
+            isPopupFailure: isPopupFailure(err)
+          });
           if (err && err.message === 'invalid-form') {
             return;
           }
@@ -275,7 +314,25 @@
           }
           setStatus('Une erreur est survenue avec PayPal. Réessayez.', true);
         }
-      }).render(paypalContainer);
+      });
+
+      if (!buttons) {
+        debugLog('paypal-buttons:init-failed', { reason: 'paypal.Buttons returned falsy value' });
+        setStatus('Impossible d’initialiser le bouton PayPal.', true);
+        return;
+      }
+
+      buttons.render(paypalContainer)
+        .then(function() {
+          debugLog('paypal-buttons:rendered', { containerPresent: !!paypalContainer });
+        })
+        .catch(function(err) {
+          logPopupContext('paypal-buttons:render-error', {
+            message: err && err.message ? err.message : String(err),
+            stack: err && err.stack ? String(err.stack) : null
+          });
+          setStatus('Impossible d’afficher le bouton PayPal. Réessayez.', true);
+        });
 
       if (paypal.CardFields) {
         const cardFields = paypal.CardFields({
