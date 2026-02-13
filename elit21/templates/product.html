@@ -49,12 +49,43 @@
     {% endif %}
   </div>
   <div class="product-gallery">
-    {% if images %}
-      {% for image in images %}
-        <img src="{{ url_for('product_image', product_id=product['id'], image_id=image['id']) }}" alt="{{ product['name'] }}" />
-      {% endfor %}
-    {% else %}
-      <img src="https://via.placeholder.com/400x240?text=ELIT21" alt="{{ product['name'] }}" />
+    <div class="product-image-frame">
+      {% if images %}
+        <img
+          id="product-main-image"
+          src="{{ url_for('product_image', product_id=product['id'], image_id=images[0]['id']) }}"
+          alt="{{ product['name'] }}"
+        />
+      {% else %}
+        <img id="product-main-image" src="https://via.placeholder.com/600x600?text=ELIT21" alt="{{ product['name'] }}" />
+      {% endif %}
+    </div>
+    {% if images|length > 1 %}
+      <div class="gallery-controls">
+        <button id="gallery-prev" type="button" aria-label="Image précédente">&#8592;</button>
+        <button id="gallery-next" type="button" aria-label="Image suivante">&#8594;</button>
+      </div>
+      <script>
+        (() => {
+          const images = [
+            {% for image in images %}
+              "{{ url_for('product_image', product_id=product['id'], image_id=image['id']) }}"{% if not loop.last %},{% endif %}
+            {% endfor %}
+          ];
+          const mainImage = document.getElementById("product-main-image");
+          const prevButton = document.getElementById("gallery-prev");
+          const nextButton = document.getElementById("gallery-next");
+
+          let current = 0;
+          const showImage = (index) => {
+            current = (index + images.length) % images.length;
+            mainImage.src = images[current];
+          };
+
+          prevButton.addEventListener("click", () => showImage(current - 1));
+          nextButton.addEventListener("click", () => showImage(current + 1));
+        })();
+      </script>
     {% endif %}
   </div>
 </div>
