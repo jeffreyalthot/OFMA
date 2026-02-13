@@ -70,6 +70,18 @@ def get_paypal_settings() -> dict[str, str]:
     }
 
 
+def is_placeholder_paypal_credential(value: str) -> bool:
+    normalized = (value or "").strip().lower()
+    return normalized in {
+        "",
+        "demo-client-id",
+        "demo-client-secret",
+        "your-paypal-client-id",
+        "your-paypal-client-secret",
+        "change-me",
+    }
+
+
 SHIPPING_FEE = float(os.getenv("SHIPPING_FEE", "9.99"))
 
 
@@ -113,12 +125,9 @@ def create_app():
 
     def ensure_paypal_configured() -> tuple[bool, str]:
         paypal_settings = get_paypal_settings()
-        if (
-            not paypal_settings["client_id"]
-            or paypal_settings["client_id"] == "demo-client-id"
-        ):
+        if is_placeholder_paypal_credential(paypal_settings["client_id"]):
             return False, "Client PayPal non configuré."
-        if not paypal_settings["client_secret"]:
+        if is_placeholder_paypal_credential(paypal_settings["client_secret"]):
             return False, "Secret PayPal non configuré."
         return True, ""
 
@@ -132,7 +141,7 @@ def create_app():
         if not is_configured:
             raise RuntimeError(config_error)
         paypal_settings = get_paypal_settings()
-        paypal_env = paypal_settings["env"]
+        configured_env = paypal_settings["env"]
         paypal_client_id = paypal_settings["client_id"]
         paypal_client_secret = paypal_settings["client_secret"]
         app.logger.debug(
@@ -140,7 +149,7 @@ def create_app():
             method,
             path,
             sorted(list((payload or {}).keys())),
-            paypal_env,
+            configured_env,
             credential_fingerprint(paypal_client_id),
             credential_fingerprint(paypal_client_secret),
         )
@@ -159,42 +168,94 @@ def create_app():
                 if "tunnel connection failed" not in reason:
                     raise
                 return direct_opener.open(req, timeout=20)
-        token_request = urllib.request.Request(
-            f"{paypal_base_url(paypal_env)}/v1/oauth2/token",
-            data=b"grant_type=client_credentials",
-            headers={
-                "Authorization": f"Basic {basic_token}",
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Accept": "application/json",
-            },
-            method="POST",
-        )
-        try:
-            with open_request(token_request) as response:
-                token_payload = json.loads(response.read().decode("utf-8"))
-                app.logger.debug(
-                    "[paypal-debug] auth token received scope=%s expires_in=%s",
-                    token_payload.get("scope"),
-                    token_payload.get("expires_in"),
-                )
-        except urllib.error.HTTPError as exc:
-            details = exc.read().decode("utf-8")
-            app.logger.error(
-                "[paypal-debug] auth http error status=%s env=%s client_id_fp=%s secret_fp=%s body=%s",
-                exc.code,
-                paypal_env,
-                credential_fingerprint(paypal_client_id),
-                credential_fingerprint(paypal_client_secret),
-                details,
+
+        def parse_paypal_error_body(raw_body: str) -> tuple[str, str]:
+            try:
+                parsed = json.loads(raw_body or "{}")
+            except json.JSONDecodeError:
+                return "", ""
+            return str(parsed.get("error") or ""), str(parsed.get("error_description") or "")
+
+        def environment_candidates(env: str) -> list[str]:
+            normalized = (env or "sandbox").strip().lower()
+            if normalized not in {"sandbox", "live"}:
+                normalized = "sandbox"
+            candidates = [normalized]
+            alternate = "live" if normalized == "sandbox" else "sandbox"
+            if os.getenv("PAYPAL_ENV_AUTO_FALLBACK", "1").strip().lower() not in {"0", "false", "no", "off"}:
+                candidates.append(alternate)
+            return candidates
+
+        candidates = environment_candidates(configured_env)
+        chosen_env = configured_env
+        token_payload = None
+        last_auth_error: RuntimeError | None = None
+        for index, candidate_env in enumerate(candidates):
+            token_request = urllib.request.Request(
+                f"{paypal_base_url(candidate_env)}/v1/oauth2/token",
+                data=b"grant_type=client_credentials",
+                headers={
+                    "Authorization": f"Basic {basic_token}",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Accept": "application/json",
+                },
+                method="POST",
             )
-            raise RuntimeError(
-                "PayPal auth échouée: "
-                f"{details}. Vérifiez PAYPAL_CLIENT_ID/PAYPAL_CLIENT_SECRET "
-                f"et PAYPAL_ENV={paypal_env}."
-            ) from exc
-        except urllib.error.URLError as exc:
-            app.logger.error("[paypal-debug] auth network error reason=%s", exc.reason)
-            raise RuntimeError(f"Connexion PayPal impossible: {exc.reason}") from exc
+            try:
+                with open_request(token_request) as response:
+                    token_payload = json.loads(response.read().decode("utf-8"))
+                    chosen_env = candidate_env
+                    app.logger.debug(
+                        "[paypal-debug] auth token received scope=%s expires_in=%s env=%s",
+                        token_payload.get("scope"),
+                        token_payload.get("expires_in"),
+                        chosen_env,
+                    )
+                    break
+            except urllib.error.HTTPError as exc:
+                details = exc.read().decode("utf-8")
+                error_code, _error_description = parse_paypal_error_body(details)
+                app.logger.error(
+                    "[paypal-debug] auth http error status=%s env=%s client_id_fp=%s secret_fp=%s body=%s",
+                    exc.code,
+                    candidate_env,
+                    credential_fingerprint(paypal_client_id),
+                    credential_fingerprint(paypal_client_secret),
+                    details,
+                )
+                last_auth_error = RuntimeError(
+                    "PayPal auth échouée: "
+                    f"{details}. Vérifiez PAYPAL_CLIENT_ID/PAYPAL_CLIENT_SECRET "
+                    f"et PAYPAL_ENV={candidate_env}."
+                )
+                if (
+                    exc.code == 401
+                    and error_code == "invalid_client"
+                    and index < len(candidates) - 1
+                ):
+                    app.logger.warning(
+                        "[paypal-debug] auth invalid_client sur env=%s; tentative automatique sur l'autre environnement",
+                        candidate_env,
+                    )
+                    continue
+                raise last_auth_error from exc
+            except urllib.error.URLError as exc:
+                app.logger.error("[paypal-debug] auth network error reason=%s", exc.reason)
+                raise RuntimeError(f"Connexion PayPal impossible: {exc.reason}") from exc
+
+        if token_payload is None:
+            if last_auth_error is not None:
+                raise last_auth_error
+            raise RuntimeError("Réponse d'authentification PayPal invalide.")
+
+        if chosen_env != configured_env:
+            app.logger.warning(
+                "[paypal-debug] PAYPAL_ENV=%s mais credentials valides sur %s. Mettez PAYPAL_ENV=%s pour éviter ce fallback.",
+                configured_env,
+                chosen_env,
+                chosen_env,
+            )
+
         access_token = token_payload.get("access_token")
         if not access_token:
             raise RuntimeError("Réponse d'authentification PayPal invalide.")
@@ -207,7 +268,7 @@ def create_app():
             request_data = json.dumps(payload).encode("utf-8")
             headers["Content-Type"] = "application/json"
         api_request = urllib.request.Request(
-            f"{paypal_base_url(paypal_env)}{path}",
+            f"{paypal_base_url(chosen_env)}{path}",
             data=request_data,
             headers=headers,
             method=method,
@@ -216,21 +277,23 @@ def create_app():
             with open_request(api_request) as response:
                 response_payload = json.loads(response.read().decode("utf-8"))
                 app.logger.debug(
-                    "[paypal-debug] paypal_request success method=%s path=%s status=%s response_keys=%s",
+                    "[paypal-debug] paypal_request success method=%s path=%s status=%s response_keys=%s env=%s",
                     method,
                     path,
                     getattr(response, "status", "unknown"),
                     sorted(list(response_payload.keys())),
+                    chosen_env,
                 )
                 return response_payload
         except urllib.error.HTTPError as exc:
             details = exc.read().decode("utf-8")
             app.logger.error(
-                "[paypal-debug] api http error method=%s path=%s status=%s body=%s",
+                "[paypal-debug] api http error method=%s path=%s status=%s body=%s env=%s",
                 method,
                 path,
                 exc.code,
                 details,
+                chosen_env,
             )
             raise RuntimeError(f"PayPal API échouée: {details}") from exc
         except urllib.error.URLError as exc:
@@ -682,6 +745,7 @@ def create_app():
                     "purchase_units": [
                         {
                             "reference_id": str(order_id),
+                            "invoice_id": f"ELIT21-{order_id}",
                             "amount": {
                                 "currency_code": "EUR",
                                 "value": money_as_text(total_money),
@@ -704,6 +768,8 @@ def create_app():
                         "brand_name": "ELIT21",
                         "shipping_preference": "NO_SHIPPING",
                         "user_action": "PAY_NOW",
+                        "return_url": url_for("paypal_return", _external=True),
+                        "cancel_url": url_for("paypal_cancel", _external=True),
                     },
                 },
             )
@@ -750,21 +816,13 @@ def create_app():
             }
         )
 
-    @app.route("/api/checkout/capture-paypal-order", methods=["POST"])
-    @login_required
-    def capture_paypal_order():
-        payload = request.json or {}
-        paypal_order_id = (payload.get("paypal_order_id") or "").strip()
-        local_order_id = payload.get("local_order_id")
-        app.logger.info(
-            "[paypal-debug] capture_order requested user_id=%s local_order_id=%s paypal_order_id=%s",
-            session.get("user_id"),
-            local_order_id,
-            paypal_order_id,
-        )
+    def capture_paypal_order_for_current_user(
+        paypal_order_id: str,
+        local_order_id: int | None,
+    ) -> tuple[dict, int]:
         if not paypal_order_id:
             app.logger.warning("[paypal-debug] capture_order rejected: missing paypal_order_id")
-            return jsonify({"error": "Paramètres de paiement manquants."}), 400
+            return {"error": "Paramètres de paiement manquants."}, 400
         conn = get_connection()
         current_user = conn.execute(
             "SELECT email FROM users WHERE id = ?", (session.get("user_id"),)
@@ -772,7 +830,7 @@ def create_app():
         if not current_user:
             conn.close()
             app.logger.warning("[paypal-debug] capture_order rejected: no current user")
-            return jsonify({"error": "Accès non autorisé à cette commande."}), 403
+            return {"error": "Accès non autorisé à cette commande."}, 403
         order = None
         if local_order_id:
             order = conn.execute(
@@ -793,14 +851,14 @@ def create_app():
         if not order:
             conn.close()
             app.logger.warning("[paypal-debug] capture_order rejected: order not found")
-            return jsonify({"error": "Commande introuvable."}), 404
+            return {"error": "Commande introuvable."}, 404
         if order["customer_email"] != current_user["email"]:
             conn.close()
             app.logger.warning(
                 "[paypal-debug] capture_order rejected: email mismatch local_order_id=%s",
                 order["id"],
             )
-            return jsonify({"error": "Accès non autorisé à cette commande."}), 403
+            return {"error": "Accès non autorisé à cette commande."}, 403
         if f"paypal_order:{paypal_order_id}" != order["payment_status"]:
             conn.close()
             app.logger.warning(
@@ -808,7 +866,7 @@ def create_app():
                 order["id"],
                 order["payment_status"],
             )
-            return jsonify({"error": "Commande PayPal incohérente."}), 409
+            return {"error": "Commande PayPal incohérente."}, 409
         local_order_id = order["id"]
         try:
             capture = paypal_request(
@@ -823,15 +881,22 @@ def create_app():
                 local_order_id,
                 paypal_order_id,
             )
-            return jsonify({"error": str(exc)}), 502
+            return {"error": str(exc)}, 502
         status = capture.get("status")
         purchase_units = capture.get("purchase_units") or []
         capture_id = None
+        capture_amount = None
+        capture_currency = None
+        reference_id = None
         if purchase_units:
+            reference_id = purchase_units[0].get("reference_id")
             payments = purchase_units[0].get("payments") or {}
             captures = payments.get("captures") or []
             if captures:
                 capture_id = captures[0].get("id")
+                amount_info = captures[0].get("amount") or {}
+                capture_amount = amount_info.get("value")
+                capture_currency = amount_info.get("currency_code")
         if status != "COMPLETED":
             conn.close()
             app.logger.error(
@@ -841,7 +906,38 @@ def create_app():
                 status,
                 capture,
             )
-            return jsonify({"error": "Le paiement PayPal n'est pas confirmé."}), 409
+            return {"error": "Le paiement PayPal n'est pas confirmé."}, 409
+        expected_reference = str(local_order_id)
+        expected_total = Decimal(str(order["total"])).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        expected_total_text = format(expected_total, ".2f")
+        if reference_id and reference_id != expected_reference:
+            conn.close()
+            app.logger.error(
+                "[paypal-debug] capture_order rejected: reference mismatch local_order_id=%s expected=%s got=%s",
+                local_order_id,
+                expected_reference,
+                reference_id,
+            )
+            return {"error": "Commande PayPal incohérente (reference)."}, 409
+        if capture_currency and capture_currency != "EUR":
+            conn.close()
+            app.logger.error(
+                "[paypal-debug] capture_order rejected: currency mismatch local_order_id=%s expected=EUR got=%s",
+                local_order_id,
+                capture_currency,
+            )
+            return {"error": "Devise PayPal inattendue."}, 409
+        if capture_amount and capture_amount != expected_total_text:
+            conn.close()
+            app.logger.error(
+                "[paypal-debug] capture_order rejected: amount mismatch local_order_id=%s expected=%s got=%s",
+                local_order_id,
+                expected_total_text,
+                capture_amount,
+            )
+            return {"error": "Montant PayPal incohérent."}, 409
         order_items = conn.execute(
             "SELECT * FROM order_items WHERE order_id = ?",
             (local_order_id,),
@@ -862,7 +958,7 @@ def create_app():
                     local_order_id,
                     item["product_id"],
                 )
-                return jsonify({"error": "Stock insuffisant après confirmation de paiement."}), 409
+                return {"error": "Stock insuffisant après confirmation de paiement."}, 409
         cursor = conn.cursor()
         for item in order_items:
             inventory = conn.execute(
@@ -902,12 +998,61 @@ def create_app():
             capture_id,
         )
         session["cart"] = {}
-        return jsonify(
-            {
-                "ok": True,
-                "redirect_url": url_for("checkout_success", order_id=local_order_id),
-            }
+        return {
+            "ok": True,
+            "redirect_url": url_for("checkout_success", order_id=local_order_id),
+        }, 200
+
+    @app.route("/api/checkout/capture-paypal-order", methods=["POST"])
+    @login_required
+    def capture_paypal_order():
+        payload = request.json or {}
+        paypal_order_id = (payload.get("paypal_order_id") or "").strip()
+        local_order_id = payload.get("local_order_id")
+        app.logger.info(
+            "[paypal-debug] capture_order requested user_id=%s local_order_id=%s paypal_order_id=%s",
+            session.get("user_id"),
+            local_order_id,
+            paypal_order_id,
         )
+        response, status_code = capture_paypal_order_for_current_user(
+            paypal_order_id=paypal_order_id,
+            local_order_id=local_order_id,
+        )
+        return jsonify(response), status_code
+
+    @app.route("/checkout/paypal/return")
+    @login_required
+    def paypal_return():
+        paypal_order_id = (request.args.get("token") or "").strip()
+        local_order_id_raw = request.args.get("local_order_id")
+        local_order_id = int(local_order_id_raw) if (local_order_id_raw or "").isdigit() else None
+        app.logger.info(
+            "[paypal-debug] paypal return user_id=%s local_order_id=%s paypal_order_id=%s payer_id=%s",
+            session.get("user_id"),
+            local_order_id,
+            paypal_order_id,
+            request.args.get("PayerID"),
+        )
+        response, status_code = capture_paypal_order_for_current_user(
+            paypal_order_id=paypal_order_id,
+            local_order_id=local_order_id,
+        )
+        if status_code != 200:
+            flash(response.get("error") or "Paiement PayPal non confirmé.")
+            return redirect(url_for("checkout"))
+        return redirect(response["redirect_url"])
+
+    @app.route("/checkout/paypal/cancel")
+    @login_required
+    def paypal_cancel():
+        app.logger.info(
+            "[paypal-debug] paypal cancel user_id=%s token=%s",
+            session.get("user_id"),
+            request.args.get("token"),
+        )
+        flash("Paiement PayPal annulé. Vous pouvez réessayer.")
+        return redirect(url_for("checkout"))
 
     @app.route("/checkout/success/<int:order_id>")
     @login_required

@@ -21,6 +21,7 @@ python run.py
 - `PAYPAL_SECRET_KEY_1` : alias accepté pour compatibilité (si `PAYPAL_CLIENT_SECRET` absent)
 - `PAYPAL_ENV` : `sandbox` ou `live`
 - `PAYPAL_DEBUG` : `1`/`true` pour activer les logs détaillés PayPal (backend + SDK frontend)
+- `PAYPAL_ENV_AUTO_FALLBACK` : `1` par défaut, tente automatiquement l'autre environnement si `invalid_client` (utile si clés live/sandbox inversées)
 - `SHIPPING_FEE` : frais de livraison fixes
 - `ELIT21_SECRET` : secret de session Flask
 
@@ -29,12 +30,26 @@ Exemple de fichier `.env` :
 ```env
 APP_NAME=AI_market
 ELIT21_SECRET=change-me
-PAYPAL_CLIENT_ID=AZtrIu_myFqZAEokeJLNZvFfqENW2N9VMFH4sb4YVmQw5h1ItKAa0rAjvc7cLTYGokhyPqbr0_LyAynM
-PAYPAL_SECRET_KEY_1=ELmY8HCdmV_iigHzbNAlA-4oEw2Hk4ezX2MlWPBe1nlHmLCVP2shv7cJspCRaIUtW90nUrDfAo5YncOS
+PAYPAL_CLIENT_ID=your-paypal-client-id
+PAYPAL_SECRET_KEY_1=your-paypal-client-secret
 PAYPAL_ENV=sandbox
 PAYPAL_DEBUG=1
 SHIPPING_FEE=9.99
 ```
+
+
+### Configuration PayPal (sans webhooks)
+
+1. Crée une application **REST** dans PayPal Developer.
+2. Copie `Client ID` + `Secret` du même environnement (**Sandbox** ou **Live**).
+3. Mets `PAYPAL_ENV` sur cet environnement (`sandbox` ou `live`).
+4. Redémarre `python run.py` après toute modification de `.env`.
+
+Notes:
+- Les webhooks ne sont pas requis pour ce flux: la confirmation passe par `create-paypal-order` puis `capture-paypal-order`.
+- Le backend configure aussi `return_url` et `cancel_url` pour couvrir le fallback redirection (popup bloqué).
+- Le backend vérifie à la capture: statut `COMPLETED`, `reference_id` de la commande, devise `EUR` et montant attendu.
+- Si `PAYPAL_ENV` est mauvais mais les clés sont valides, le backend tente automatiquement l'autre environnement (désactivable via `PAYPAL_ENV_AUTO_FALLBACK=0`).
 
 ## Structure
 
