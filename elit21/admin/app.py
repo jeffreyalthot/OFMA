@@ -25,6 +25,7 @@ from elit21.db import get_connection, init_db
 
 
 MAX_IMAGES = 8
+ORDERS_AUTO_REFRESH_MS = 60_000
 COLOR_OPTIONS = [
     "",
     "Noir",
@@ -83,6 +84,7 @@ class AdminApp:
 
         self.selected_images: list[tuple[bytes, str]] = []
         self.image_previews: list[ImageTk.PhotoImage] = []
+        self.orders_refresh_job: str | None = None
 
         notebook = ttk.Notebook(root)
         notebook.pack(fill="both", expand=True)
@@ -106,6 +108,7 @@ class AdminApp:
         self._build_transactions_tab()
 
         self.refresh_all()
+        self.schedule_orders_refresh()
 
     def _build_dashboard(self) -> None:
         self.dashboard_cards = {}
@@ -360,20 +363,22 @@ class AdminApp:
 
         detail_frame = ttk.Labelframe(container, text="Détail commande", padding=15)
         detail_frame.pack(side="left", fill="both", padx=15)
+        detail_frame.configure(width=520)
+        detail_frame.pack_propagate(False)
 
         self.order_detail_label = ttk.Label(detail_frame, text="Sélectionnez une commande")
         self.order_detail_label.pack(anchor="w")
 
         address_frame = ttk.Labelframe(detail_frame, text="Adresse client", padding=10)
         address_frame.pack(fill="x", pady=10)
-        address_frame.configure(height=90)
+        address_frame.configure(height=120)
         address_frame.pack_propagate(False)
         self.order_address_label = Label(
             address_frame,
             text="Adresse indisponible",
             justify="left",
-            wraplength=320,
-            height=4,
+            wraplength=430,
+            height=5,
             anchor="w",
         )
         self.order_address_label.pack(fill="both", expand=True)
@@ -414,25 +419,32 @@ class AdminApp:
 
         items_frame = ttk.Labelframe(detail_frame, text="Articles commandés", padding=10)
         items_frame.pack(fill="both", expand=True, side="bottom", pady=(10, 0))
+        items_frame.configure(height=210)
+        items_frame.pack_propagate(False)
         item_columns = ("article", "quantite", "prix", "color", "size")
         self.order_items_tree = ttk.Treeview(
             items_frame,
             columns=item_columns,
             show="headings",
             displaycolumns=("article", "quantite", "prix"),
-            height=6,
+            height=5,
         )
         self.order_items_tree.heading("article", text="Article")
         self.order_items_tree.heading("quantite", text="Qté")
         self.order_items_tree.heading("prix", text="Prix")
-        self.order_items_tree.column("article", width=180)
+        self.order_items_tree.column("article", width=240)
         self.order_items_tree.column("quantite", width=60)
         self.order_items_tree.column("prix", width=80)
         self.order_items_tree.pack(side="left", fill="both", expand=True)
         self.order_items_tree.bind("<<TreeviewSelect>>", self.update_order_item_indicator)
-        items_scrollbar = ttk.Scrollbar(items_frame, orient="vertical", command=self.order_items_tree.yview)
-        items_scrollbar.pack(side="right", fill="y")
-        self.order_items_tree.configure(yscrollcommand=items_scrollbar.set)
+        items_scrollbar_y = ttk.Scrollbar(items_frame, orient="vertical", command=self.order_items_tree.yview)
+        items_scrollbar_y.pack(side="right", fill="y")
+        items_scrollbar_x = ttk.Scrollbar(items_frame, orient="horizontal", command=self.order_items_tree.xview)
+        items_scrollbar_x.pack(side="bottom", fill="x")
+        self.order_items_tree.configure(
+            yscrollcommand=items_scrollbar_y.set,
+            xscrollcommand=items_scrollbar_x.set,
+        )
 
     def _build_transactions_tab(self) -> None:
         container = ttk.Frame(self.transactions_tab, padding=20)
@@ -944,6 +956,8 @@ class AdminApp:
         messagebox.showinfo("Succès", "Statut mis à jour.")
 
     def refresh_orders(self) -> None:
+        selected = self.orders_tree.selection()
+        selected_order = selected[0] if selected else None
         for item in self.orders_tree.get_children():
             self.orders_tree.delete(item)
 
@@ -968,6 +982,21 @@ class AdminApp:
                     order["created_at"],
                 ),
             )
+
+        if selected_order and self.orders_tree.exists(selected_order):
+            self.orders_tree.selection_set(selected_order)
+            self.orders_tree.focus(selected_order)
+            self.orders_tree.see(selected_order)
+            self.show_order_detail()
+
+    def schedule_orders_refresh(self) -> None:
+        if self.orders_refresh_job is not None:
+            self.root.after_cancel(self.orders_refresh_job)
+        self.orders_refresh_job = self.root.after(ORDERS_AUTO_REFRESH_MS, self.auto_refresh_orders)
+
+    def auto_refresh_orders(self) -> None:
+        self.refresh_orders()
+        self.schedule_orders_refresh()
 
     def refresh_transactions(self) -> None:
         for item in self.transactions_tree.get_children():
