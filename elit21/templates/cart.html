@@ -11,7 +11,7 @@
           <div>
             <h3>{{ item.product['name'] }}</h3>
             <p class="muted">{{ item.product['description'][:100] }}{% if item.product['description']|length > 100 %}...{% endif %}</p>
-            <p class="muted">Couleur: {{ item.color }} | Taille: {{ item.size }}</p>
+            <p class="muted">{{ tr("color") }}: {{ item.color }} | {{ tr("size") }}: {{ item.size }}</p>
             <p class="price">{{ format_money(item.product['price']) }}</p>
           </div>
           <div class="cart-actions">

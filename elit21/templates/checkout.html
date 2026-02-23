@@ -6,35 +6,35 @@
     <h2>{{ tr("secure_checkout") }}</h2>
     <p>{{ tr("checkout_intro") }}</p>
     <form id="checkout-form" class="order-form">
-      <label for="customer_name">Nom et prénom</label>
-      <input id="customer_name" name="customer_name" placeholder="Nom complet du client" required />
-      <label for="house_number">N° maison</label>
-      <input id="house_number" name="house_number" placeholder="Numéro de maison" required />
-      <label for="street">Rue ou avenue</label>
-      <input id="street" name="street" placeholder="Rue ou avenue" required />
-      <label for="apartment">Appartement (facultatif)</label>
-      <input id="apartment" name="apartment" placeholder="Appartement, suite, étage" />
-      <label for="city">Ville</label>
-      <input id="city" name="city" placeholder="Ville" required />
-      <label for="province">Province</label>
-      <input id="province" name="province" placeholder="Province ou région" required />
-      <label for="country">Pays</label>
-      <input id="country" name="country" placeholder="Pays" required />
-      <label for="postal_code">Code postal</label>
-      <input id="postal_code" name="postal_code" placeholder="Code postal" required />
+      <label for="customer_name">{{ tr("full_name") }}</label>
+      <input id="customer_name" name="customer_name" placeholder="{{ tr('full_name_placeholder') }}" required />
+      <label for="house_number">{{ tr("house_number") }}</label>
+      <input id="house_number" name="house_number" placeholder="{{ tr('house_number_placeholder') }}" required />
+      <label for="street">{{ tr("street") }}</label>
+      <input id="street" name="street" placeholder="{{ tr("street") }}" required />
+      <label for="apartment">{{ tr("apartment_optional") }}</label>
+      <input id="apartment" name="apartment" placeholder="{{ tr('apartment_placeholder') }}" />
+      <label for="city">{{ tr("city") }}</label>
+      <input id="city" name="city" placeholder="{{ tr("city") }}" required />
+      <label for="province">{{ tr("province") }}</label>
+      <input id="province" name="province" placeholder="{{ tr('province_placeholder') }}" required />
+      <label for="country">{{ tr("country") }}</label>
+      <input id="country" name="country" placeholder="{{ tr("country") }}" required />
+      <label for="postal_code">{{ tr("postal_code") }}</label>
+      <input id="postal_code" name="postal_code" placeholder="{{ tr("postal_code") }}" required />
     </form>
 
     <div id="checkout-status" class="muted"></div>
     <div id="paypal-button-container" class="paypal-box"></div>
     <div id="card-fields-wrapper" class="paypal-box" hidden>
-      <p class="muted">Paiement par carte</p>
+      <p class="muted">{{ tr("card_payment") }}</p>
       <div class="card-fields-grid">
         <div>
-          <label>Numéro de carte</label>
+          <label>{{ tr("card_number") }}</label>
           <div id="card-number" class="card-field"></div>
         </div>
         <div>
-          <label>Expiration</label>
+          <label>{{ tr("expiration") }}</label>
           <div id="card-expiry" class="card-field"></div>
         </div>
         <div>
@@ -42,10 +42,10 @@
           <div id="card-cvv" class="card-field"></div>
         </div>
       </div>
-      <button id="card-pay-button" type="button" class="action-button">Payer par carte</button>
+      <button id="card-pay-button" type="button" class="action-button">{{ tr("pay_by_card") }}</button>
     </div>
     {% if not paypal_configured %}
-      <p class="flash">Configurez PAYPAL_CLIENT_ID et PAYPAL_CLIENT_SECRET (ou PAYPAL_SECRET_KEY_1) dans .env pour activer le paiement.</p>
+      <p class="flash">{{ tr("paypal_env_config") }}</p>
     {% endif %}
   </div>
 
@@ -150,12 +150,12 @@
         return createOrderRequest;
       }
       if (!form.reportValidity()) {
-        setStatus('Merci de compléter les informations de livraison.', true);
+        setStatus('{{ tr("complete_shipping_info") }}', true);
         return Promise.reject(new Error('invalid-form'));
       }
       const payload = formDataAsJson();
       debugLog('create-server-order:start', { shipping_city: payload.city, shipping_country: payload.country });
-      setStatus('Création de la commande PayPal en cours...', false);
+      setStatus('{{ tr("creating_paypal_order") }}', false);
       createOrderRequest = fetch("{{ url_for('create_paypal_order') }}", {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -165,7 +165,7 @@
         .then(({ ok, data }) => {
           debugLog('create-server-order:response', { ok: ok, has_order_id: !!data.id, local_order_id: data.local_order_id, error: data.error || null });
           if (!ok || !data.id) {
-            setStatus(data.error || 'Erreur lors de la préparation du paiement.', true);
+            setStatus(data.error || '{{ tr("payment_prepare_error") }}', true);
             throw new Error('create-order-failed');
           }
           pendingLocalOrderId = data.local_order_id;
@@ -200,7 +200,7 @@
     function captureServerOrder(paypalOrderId) {
       const localOrderId = pendingLocalOrderId || window.localStorage.getItem('elit21_checkout_order_id');
       debugLog('capture-server-order:start', { paypalOrderId, localOrderId });
-      setStatus('Validation du paiement...', false);
+      setStatus('{{ tr("validating_payment") }}', false);
       return fetch("{{ url_for('capture_paypal_order') }}", {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -213,7 +213,7 @@
         .then(({ ok, payload }) => {
           debugLog('capture-server-order:response', { ok: ok, payload_ok: payload.ok, error: payload.error || null, redirect_url: payload.redirect_url || null });
           if (!ok || !payload.ok) {
-            setStatus(payload.error || 'Paiement non confirmé.', true);
+            setStatus(payload.error || '{{ tr("payment_not_confirmed") }}', true);
             throw new Error('capture-failed');
           }
           pendingLocalOrderId = null;
@@ -264,7 +264,7 @@
           reason: 'paypal sdk unavailable',
           hasPayPalObject: !!paypalSdk
         });
-        setStatus('Impossible d’initialiser PayPal. Réessayez dans quelques instants.', true);
+        setStatus('{{ tr("paypal_init_failed") }}', true);
         return;
       }
 
@@ -276,7 +276,7 @@
             buttonVisible: !!(paypalContainer && paypalContainer.offsetParent)
           });
           if (!form.reportValidity()) {
-            setStatus('Merci de compléter les informations de livraison.', true);
+            setStatus('{{ tr("complete_shipping_info") }}', true);
             return actions.reject();
           }
           debugLog('paypal-buttons:onClick:validated', {});
@@ -296,7 +296,7 @@
         onCancel: function() {
           pendingPaypalOrderId = null;
           debugLog('paypal-buttons:onCancel', {});
-          setStatus('Paiement annulé. Vous pouvez réessayer.', true);
+          setStatus('{{ tr("payment_cancelled_retry") }}', true);
         },
         onError: function(err) {
           logPopupContext('paypal-buttons:onError', {
@@ -309,13 +309,13 @@
           }
           if (isPopupFailure(err) && pendingApproveUrl) {
             pendingPaypalOrderId = null;
-            setStatus('Le popup PayPal a été bloqué. Redirection vers PayPal en cours...', true);
+            setStatus('{{ tr("paypal_popup_blocked_redirect") }}', true);
             debugLog('paypal-buttons:popup-fallback-redirect', { pendingApproveUrl });
             window.location.href = pendingApproveUrl;
             return;
           }
           if (isPopupFailure(err) && !pendingApproveUrl) {
-            setStatus('Le popup PayPal a été bloqué. Préparation d’une redirection sécurisée...', true);
+            setStatus('{{ tr("paypal_popup_blocked_preparing") }}', true);
             debugLog('paypal-buttons:popup-fallback-create-order', {});
             createServerOrder()
               .then(function() {
@@ -328,21 +328,21 @@
               })
               .catch(function(fallbackError) {
                 debugLog('paypal-buttons:popup-fallback-failed', { message: fallbackError && fallbackError.message ? fallbackError.message : String(fallbackError) });
-                setStatus('Impossible d’ouvrir PayPal automatiquement. Réessayez.', true);
+                setStatus('{{ tr("paypal_open_failed") }}', true);
               });
             return;
           }
           if (debugEnabled && err) {
-            setStatus('Erreur PayPal: ' + (err.message || String(err)), true);
+            setStatus('{{ tr("paypal_error_prefix") }}' + (err.message || String(err)), true);
             return;
           }
-          setStatus('Une erreur est survenue avec PayPal. Réessayez.', true);
+          setStatus('{{ tr("paypal_error_retry") }}', true);
         }
       });
 
       if (!buttons) {
         debugLog('paypal-buttons:init-failed', { reason: 'paypal.Buttons returned falsy value' });
-        setStatus('Impossible d’initialiser le bouton PayPal.', true);
+        setStatus('{{ tr("paypal_button_init_failed") }}', true);
         return;
       }
 
@@ -355,7 +355,7 @@
             message: err && err.message ? err.message : String(err),
             stack: err && err.stack ? String(err.stack) : null
           });
-          setStatus('Impossible d’afficher le bouton PayPal. Réessayez.', true);
+          setStatus('{{ tr("paypal_button_render_failed") }}', true);
         });
 
       if (paypalSdk.CardFields) {
@@ -370,7 +370,7 @@
             if (err && err.message === 'invalid-form') {
               return;
             }
-            setStatus('Une erreur est survenue avec la carte. Réessayez.', true);
+            setStatus('{{ tr("card_error_retry") }}', true);
           }
         });
 
@@ -382,14 +382,14 @@
           cardFields.CVVField().render('#card-cvv');
           cardPayButton.addEventListener('click', function() {
             if (!form.reportValidity()) {
-              setStatus('Merci de compléter les informations de livraison.', true);
+              setStatus('{{ tr("complete_shipping_info") }}', true);
               return;
             }
-            setStatus('Validation du paiement carte...', false);
+            setStatus('{{ tr("validating_card_payment") }}', false);
             cardFields.submit().catch(function(err) {
               debugLog('paypal-card:submit-error', { message: err && err.message ? err.message : String(err) });
               if (err && err.message !== 'invalid-form') {
-                setStatus('Paiement carte refusé. Vérifiez les informations saisies.', true);
+                setStatus('{{ tr("card_payment_declined") }}', true);
               }
             });
           });
@@ -399,7 +399,7 @@
       }
     }
 
-    setStatus('Chargement sécurisé du module PayPal...', false);
+    setStatus('{{ tr("loading_paypal") }}', false);
     loadPayPalSdk()
       .then(function(paypalSdk) {
         setStatus('', false);
@@ -407,10 +407,10 @@
       })
       .catch(function(error) {
         if (error && error.message === 'paypal-not-configured') {
-          setStatus('Le paiement PayPal est momentanément indisponible.', true);
+          setStatus('{{ tr("paypal_temporarily_unavailable") }}', true);
           return;
         }
-        setStatus('Impossible de charger le module PayPal. Réessayez dans quelques instants.', true);
+        setStatus('{{ tr("paypal_load_failed") }}', true);
       });
   })();
 </script>
