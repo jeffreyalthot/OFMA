@@ -22,7 +22,7 @@ from flask import (
     url_for,
 )
 
-from elit21.db import get_connection, get_site_settings, init_db
+from elit21.db import CURRENCY_OPTIONS, get_connection, get_site_settings, init_db
 
 
 def load_env_file() -> None:
@@ -346,6 +346,23 @@ def create_app():
     def get_site_settings_payload() -> dict[str, str]:
         return get_site_settings()
 
+    def get_currency_payload() -> dict[str, str]:
+        settings = get_site_settings_payload()
+        currency_code = str(settings.get("currency_code") or "CAD").upper()
+        if currency_code not in CURRENCY_OPTIONS:
+            currency_code = "CAD"
+        currency_meta = CURRENCY_OPTIONS[currency_code]
+        return {
+            "code": currency_code,
+            "name": currency_meta["name"],
+            "symbol": currency_meta["symbol"],
+            "label": f"{currency_meta['symbol']} ({currency_code})",
+        }
+
+    def format_money(value: float | Decimal) -> str:
+        amount = Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return f"{get_currency_payload()['label']} {amount:.2f}"
+
     def load_cart_items():
         cart = get_cart()
         if not cart:
@@ -382,7 +399,12 @@ def create_app():
 
     @app.context_processor
     def inject_cart_metrics():
-        return {"cart_count": cart_count(), "site_settings": get_site_settings_payload()}
+        return {
+            "cart_count": cart_count(),
+            "site_settings": get_site_settings_payload(),
+            "currency": get_currency_payload(),
+            "format_money": format_money,
+        }
 
     def login_required(view_func):
         @wraps(view_func)
@@ -615,6 +637,7 @@ def create_app():
             flash("Votre panier est vide.")
             return redirect(url_for("cart"))
         total = subtotal + SHIPPING_FEE
+        currency = get_currency_payload()
         return render_template(
             "checkout.html",
             paypal_client_id=get_paypal_settings()["client_id"],
@@ -625,6 +648,7 @@ def create_app():
             shipping_fee=SHIPPING_FEE,
             total=total,
             paypal_configured=ensure_paypal_configured()[0],
+            paypal_currency_code=currency["code"],
         )
 
     @app.route("/api/checkout/create-paypal-order", methods=["POST"])
@@ -653,6 +677,7 @@ def create_app():
         subtotal_money = to_money(subtotal)
         shipping_fee_money = to_money(SHIPPING_FEE)
         total_money = to_money(subtotal_money + shipping_fee_money)
+        currency_code = get_currency_payload()["code"]
         paypal_items = []
         for item in items:
             unit_amount = to_money(item["product"]["price"])
@@ -662,7 +687,7 @@ def create_app():
                     "description": f"Couleur: {item['color']} / Taille: {item['size']}"[:127],
                     "sku": f"{item['product']['id']}-{item['color']}-{item['size']}"[:127],
                     "unit_amount": {
-                        "currency_code": "CAD",
+                        "currency_code": currency_code,
                         "value": money_as_text(unit_amount),
                     },
                     "quantity": str(item["quantity"]),
@@ -755,15 +780,15 @@ def create_app():
                             "reference_id": str(order_id),
                             "invoice_id": f"ELIT21-{order_id}",
                             "amount": {
-                                "currency_code": "CAD",
+                                "currency_code": currency_code,
                                 "value": money_as_text(total_money),
                                 "breakdown": {
                                     "item_total": {
-                                        "currency_code": "CAD",
+                                        "currency_code": currency_code,
                                         "value": money_as_text(subtotal_money),
                                     },
                                     "shipping": {
-                                        "currency_code": "CAD",
+                                        "currency_code": currency_code,
                                         "value": money_as_text(shipping_fee_money),
                                     },
                                 },
@@ -920,6 +945,7 @@ def create_app():
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
         expected_total_text = format(expected_total, ".2f")
+        expected_currency = get_currency_payload()["code"]
         if reference_id and reference_id != expected_reference:
             conn.close()
             app.logger.error(
@@ -929,11 +955,12 @@ def create_app():
                 reference_id,
             )
             return {"error": "Commande PayPal incohérente (reference)."}, 409
-        if capture_currency and capture_currency != "CAD":
+        if capture_currency and capture_currency != expected_currency:
             conn.close()
             app.logger.error(
-                "[paypal-debug] capture_order rejected: currency mismatch local_order_id=%s expected=CAD got=%s",
+                "[paypal-debug] capture_order rejected: currency mismatch local_order_id=%s expected=%s got=%s",
                 local_order_id,
+                expected_currency,
                 capture_currency,
             )
             return {"error": "Devise PayPal inattendue."}, 409

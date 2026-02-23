@@ -23,7 +23,7 @@ except ImportError:  # pragma: no cover - optional dependency
     Image = None
     ImageTk = None
 
-from elit21.db import DEFAULT_SITE_SETTINGS, get_connection, get_site_settings, init_db
+from elit21.db import CURRENCY_OPTIONS, DEFAULT_SITE_SETTINGS, get_connection, get_site_settings, init_db
 
 
 MAX_IMAGES = 8
@@ -99,11 +99,15 @@ class AdminApp:
         self.image_previews: list[ImageTk.PhotoImage] = []
         self.orders_refresh_job: str | None = None
         self.site_settings_window: Toplevel | None = None
+        self.currency_window: Toplevel | None = None
         self.site_settings_vars: dict[str, StringVar] = {}
+        self.currency_var = StringVar(value="CAD")
+        self.currency_code = "CAD"
 
         top_bar = ttk.Frame(root, padding=(10, 6))
         top_bar.pack(fill="x")
         ttk.Button(top_bar, text="Web Page", command=self.open_site_settings_window).pack(side="left")
+        ttk.Button(top_bar, text="Devise", command=self.open_currency_window).pack(side="left", padx=(8, 0))
 
         notebook = ttk.Notebook(root)
         notebook.pack(fill="both", expand=True)
@@ -208,7 +212,8 @@ class AdminApp:
         self.product_description = Text(form_frame, width=40, height=6)
         self.product_description.pack(anchor="w")
 
-        ttk.Label(form_frame, text="Prix ($ CAD)").pack(anchor="w", pady=(10, 0))
+        self.product_price_label = ttk.Label(form_frame, text="Prix")
+        self.product_price_label.pack(anchor="w", pady=(10, 0))
         ttk.Entry(form_frame, textvariable=self.product_price, width=20).pack(anchor="w")
 
         ttk.Label(form_frame, text="Stock").pack(anchor="w", pady=(10, 0))
@@ -618,11 +623,32 @@ class AdminApp:
         messagebox.showinfo("Succès", "Article enregistré.")
 
     def refresh_all(self) -> None:
+        self.refresh_currency_settings()
+        self.update_currency_labels()
         self.refresh_dashboard()
         self.refresh_products()
         self.refresh_inventory()
         self.refresh_orders()
         self.refresh_transactions()
+
+    def refresh_currency_settings(self) -> None:
+        settings = get_site_settings()
+        currency_code = str(settings.get("currency_code") or "CAD").upper()
+        if currency_code not in CURRENCY_OPTIONS:
+            currency_code = "CAD"
+        self.currency_code = currency_code
+        self.currency_var.set(currency_code)
+
+    def get_currency_label(self) -> str:
+        currency = CURRENCY_OPTIONS.get(self.currency_code, CURRENCY_OPTIONS["CAD"])
+        return f"{currency['symbol']} ({self.currency_code})"
+
+    def format_money(self, amount: float) -> str:
+        return f"{self.get_currency_label()} {amount:.2f}"
+
+    def update_currency_labels(self) -> None:
+        if hasattr(self, "product_price_label"):
+            self.product_price_label.config(text=f"Prix ({self.get_currency_label()})")
 
     def refresh_dashboard(self) -> None:
         conn = get_connection()
@@ -651,7 +677,7 @@ class AdminApp:
 
         self.dashboard_cards["Total commandes"].config(text=str(total_orders))
         self.dashboard_cards["Commandes en traitement"].config(text=str(processing_orders))
-        self.dashboard_cards["Chiffre d'affaires"].config(text=f"$ (CAD) {revenue:.2f}")
+        self.dashboard_cards["Chiffre d'affaires"].config(text=self.format_money(revenue))
         self.dashboard_cards["Articles actifs"].config(text=str(active_products))
 
         self.draw_sales_and_orders_chart(last_7_days)
@@ -706,7 +732,13 @@ class AdminApp:
         canvas.create_rectangle(right - 140, top + 2, right - 128, top + 14, fill="#4a90e2", outline="")
         canvas.create_text(right - 122, top + 8, text="Commandes", anchor="w", font=("Segoe UI", 8))
         canvas.create_rectangle(right - 70, top + 2, right - 58, top + 14, fill="#27ae60", outline="")
-        canvas.create_text(right - 52, top + 8, text="Ventes ($ CAD)", anchor="w", font=("Segoe UI", 8))
+        canvas.create_text(
+            right - 52,
+            top + 8,
+            text=f"Ventes ({self.get_currency_label()})",
+            anchor="w",
+            font=("Segoe UI", 8),
+        )
 
     def draw_revenue_pie_chart(self, rows) -> None:
         data = [item for item in self._normalized_7_days(rows) if item["revenue"] > 0]
@@ -843,7 +875,7 @@ class AdminApp:
                     product["id"],
                     product["name"],
                     product["status"],
-                    f"$ (CAD) {product['price']:.2f}",
+                    self.format_money(product["price"]),
                     product["stock"],
                 ),
             )
@@ -998,7 +1030,7 @@ class AdminApp:
                     order["customer_name"],
                     order["status"],
                     order["payment_status"],
-                    f"$ (CAD) {order['total']:.2f}",
+                    self.format_money(order["total"]),
                     order["created_at"],
                 ),
             )
@@ -1032,7 +1064,7 @@ class AdminApp:
             self.transactions_tree.insert(
                 "",
                 "end",
-                values=(tx["id"], tx["order_id"], f"$ (CAD) {tx['total']:.2f}", tx["completed_at"]),
+                values=(tx["id"], tx["order_id"], self.format_money(tx["total"]), tx["completed_at"]),
             )
 
     def show_order_detail(self, _event=None) -> None:
@@ -1059,7 +1091,7 @@ class AdminApp:
                 values=(
                     item["product_name"],
                     item["quantity"],
-                    f"$ (CAD) {item['price']:.2f}",
+                    self.format_money(item["price"]),
                     item["color"] or "",
                     item["size"] or "",
                 ),
@@ -1071,8 +1103,8 @@ class AdminApp:
             f"Date achat: {order['created_at']}\n"
             f"Statut: {order['status']}\n"
             f"Paiement: {order['payment_status']}\n"
-            f"Livraison: $ (CAD) {order['shipping_fee']:.2f}\n"
-            f"Total TTC: $ (CAD) {order['total']:.2f}"
+            f"Livraison: {self.format_money(order['shipping_fee'])}\n"
+            f"Total TTC: {self.format_money(order['total'])}"
         )
         self.order_address_label.config(text=self.format_customer_address(order))
         self.order_detail_label.config(text=detail)
@@ -1152,6 +1184,68 @@ class AdminApp:
         conn.commit()
         conn.close()
         self.refresh_all()
+
+    def open_currency_window(self) -> None:
+        if self.currency_window and self.currency_window.winfo_exists():
+            self.currency_window.lift()
+            self.currency_window.focus_force()
+            return
+
+        self.refresh_currency_settings()
+        self.currency_window = Toplevel(self.root)
+        self.currency_window.title("Devise monétaire")
+        self.currency_window.geometry("420x220")
+        self.currency_window.resizable(False, False)
+
+        frame = ttk.Frame(self.currency_window, padding=16)
+        frame.pack(fill="both", expand=True)
+
+        ttk.Label(
+            frame,
+            text="Choisir la devise utilisée sur le site et pour PayPal:",
+            wraplength=360,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 10))
+
+        values = [
+            f"{code} - {meta['name']} ({meta['symbol']})"
+            for code, meta in CURRENCY_OPTIONS.items()
+        ]
+        self.currency_combo = ttk.Combobox(frame, values=values, state="readonly", width=42)
+        self.currency_combo.pack(anchor="w")
+        selected_value = next(
+            (v for v in values if v.startswith(f"{self.currency_code} - ")),
+            values[0],
+        )
+        self.currency_combo.set(selected_value)
+
+        ttk.Button(
+            frame,
+            text="Confirmer",
+            command=self.save_currency_selection,
+        ).pack(anchor="e", pady=(16, 0))
+
+    def save_currency_selection(self) -> None:
+        if not hasattr(self, "currency_combo"):
+            return
+        selected = self.currency_combo.get().strip()
+        currency_code = selected.split(" - ", 1)[0].upper() if selected else "CAD"
+        if currency_code not in CURRENCY_OPTIONS:
+            messagebox.showerror("Erreur", "Devise invalide.")
+            return
+
+        conn = get_connection()
+        conn.execute("UPDATE site_settings SET currency_code = ? WHERE id = 1", (currency_code,))
+        conn.commit()
+        conn.close()
+
+        self.refresh_all()
+        if self.currency_window and self.currency_window.winfo_exists():
+            self.currency_window.destroy()
+        messagebox.showinfo(
+            "Succès",
+            f"Devise mise à jour: {CURRENCY_OPTIONS[currency_code]['name']} ({CURRENCY_OPTIONS[currency_code]['symbol']}).",
+        )
 
 
     def choose_color(self, key: str, preview: Label) -> None:

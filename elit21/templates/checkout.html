@@ -55,21 +55,21 @@
       {% for item in items %}
         <li>
           {{ item.product['name'] }} x{{ item.quantity }}
-          <span>$ (CAD) {{ '%.2f'|format(item.line_total) }}</span>
+          <span>{{ format_money(item.line_total) }}</span>
         </li>
       {% endfor %}
     </ul>
     <div class="summary-row">
       <span>Sous-total</span>
-      <span>$ (CAD) {{ '%.2f'|format(subtotal) }}</span>
+      <span>{{ format_money(subtotal) }}</span>
     </div>
     <div class="summary-row">
       <span>Livraison</span>
-      <span>$ (CAD) {{ '%.2f'|format(shipping_fee) }}</span>
+      <span>{{ format_money(shipping_fee) }}</span>
     </div>
     <div class="summary-row total">
       <span>Total TTC</span>
-      <span>$ (CAD) {{ '%.2f'|format(total) }}</span>
+      <span>{{ format_money(total) }}</span>
     </div>
   </div>
 </div>
@@ -236,7 +236,7 @@
       const sdkUrl = new URL('https://www.paypal.com/sdk/js');
       sdkUrl.searchParams.set('client-id', '{{ paypal_client_id }}');
       sdkUrl.searchParams.set('components', 'buttons,card-fields');
-      sdkUrl.searchParams.set('currency', 'CAD');
+      sdkUrl.searchParams.set('currency', '{{ paypal_currency_code }}');
       sdkUrl.searchParams.set('intent', 'capture');
       if (debugEnabled) {
         sdkUrl.searchParams.set('debug', 'true');
