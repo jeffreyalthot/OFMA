@@ -46,7 +46,52 @@ COLOR_OPTIONS = [
     "Marine",
     "Turquoise",
 ]
-SIZE_OPTIONS = ["", "S", "M", "L", "XL", "XXL"]
+BASE_CLOTHING_SIZES = [
+    "XXXXS",
+    "XXXS",
+    "XXS",
+    "XS",
+    "S",
+    "M",
+    "L",
+    "XL",
+    "XXL",
+    "XXXL",
+    "XXXXL",
+]
+PANTS_SIZE_OPTIONS = [f"{waist}/{inseam}" for waist in range(24, 51) for inseam in range(28, 37)]
+HEAD_SIZE_OPTIONS = [
+    "Tête 51 cm",
+    "Tête 52 cm",
+    "Tête 53 cm",
+    "Tête 54 cm",
+    "Tête 55 cm",
+    "Tête 56 cm",
+    "Tête 57 cm",
+    "Tête 58 cm",
+    "Tête 59 cm",
+    "Tête 60 cm",
+    "Tête 61 cm",
+    "Tête 62 cm",
+    "Tête 63 cm",
+    "Tête 64 cm",
+    "Tête 65 cm",
+    "6 1/4",
+    "6 1/2",
+    "6 5/8",
+    "6 3/4",
+    "6 7/8",
+    "7",
+    "7 1/8",
+    "7 1/4",
+    "7 3/8",
+    "7 1/2",
+    "7 5/8",
+    "7 3/4",
+    "7 7/8",
+    "8",
+]
+SIZE_OPTIONS = ["", *list(dict.fromkeys(BASE_CLOTHING_SIZES + PANTS_SIZE_OPTIONS + HEAD_SIZE_OPTIONS))]
 CATEGORY_OPTIONS = [
     "",
     "Chapeaux",
