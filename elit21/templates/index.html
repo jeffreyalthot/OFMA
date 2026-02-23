@@ -8,7 +8,7 @@
     <p>
       {{ site_settings['promo_description_text'] }}
     </p>
-    <a class="cta" href="#market">Explorer le market</a>
+    <a class="cta" href="#market">{{ tr("explore_market") }}</a>
   </div>
   <div>
     <div class="dashboard-grid">
@@ -30,7 +30,7 @@
 {% endblock %}
 
 {% block content %}
-<h2 id="market" class="section-title">Market {{ site_settings["site_name"] }}</h2>
+<h2 id="market" class="section-title">{{ tr("market_title") }} {{ site_settings["site_name"] }}</h2>
 {% if products %}
   <div class="market-grid">
     {% for product in products %}
@@ -44,12 +44,12 @@
           <h3>{{ product['name'] }}</h3>
           <p>{{ product['description'][:120] }}{% if product['description']|length > 120 %}...{% endif %}</p>
           <div class="price">{{ format_money(product['price']) }}</div>
-          <a href="{{ url_for('product_detail', product_id=product['id']) }}">Voir l'article</a>
+          <a href="{{ url_for('product_detail', product_id=product['id']) }}">{{ tr("view_item") }}</a>
         </div>
       </div>
     {% endfor %}
   </div>
 {% else %}
-  <p>Aucun article disponible pour le moment. Revenez bientôt !</p>
+  <p>{{ tr("no_items") }}</p>
 {% endif %}
 {% endblock %}

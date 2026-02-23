@@ -24,6 +24,7 @@ except ImportError:  # pragma: no cover - optional dependency
     ImageTk = None
 
 from elit21.db import CURRENCY_OPTIONS, DEFAULT_SITE_SETTINGS, get_connection, get_site_settings, init_db
+from elit21.i18n import SUPPORTED_LANGUAGES, admin_tr, normalize_language
 
 
 MAX_IMAGES = 8
@@ -103,11 +104,17 @@ class AdminApp:
         self.site_settings_vars: dict[str, StringVar] = {}
         self.currency_var = StringVar(value="CAD")
         self.currency_code = "CAD"
+        self.language_code = "fr"
+        self.language_window: Toplevel | None = None
 
         top_bar = ttk.Frame(root, padding=(10, 6))
         top_bar.pack(fill="x")
-        ttk.Button(top_bar, text="Web Page", command=self.open_site_settings_window).pack(side="left")
-        ttk.Button(top_bar, text="Devise", command=self.open_currency_window).pack(side="left", padx=(8, 0))
+        self.web_button = ttk.Button(top_bar, command=self.open_site_settings_window)
+        self.web_button.pack(side="left")
+        self.currency_button = ttk.Button(top_bar, command=self.open_currency_window)
+        self.currency_button.pack(side="left", padx=(8, 0))
+        self.language_button = ttk.Button(top_bar, command=self.open_language_window)
+        self.language_button.pack(side="left", padx=(8, 0))
 
         notebook = ttk.Notebook(root)
         notebook.pack(fill="both", expand=True)
@@ -118,11 +125,12 @@ class AdminApp:
         self.orders_tab = ttk.Frame(notebook)
         self.transactions_tab = ttk.Frame(notebook)
 
-        notebook.add(self.dashboard_tab, text="Dashboard Finance")
-        notebook.add(self.products_tab, text="Gestion Articles")
-        notebook.add(self.inventory_tab, text="Gestion Inventaire")
-        notebook.add(self.orders_tab, text="Gestion Commandes")
-        notebook.add(self.transactions_tab, text="Transactions Complétées")
+        self.notebook = notebook
+        notebook.add(self.dashboard_tab, text="")
+        notebook.add(self.products_tab, text="")
+        notebook.add(self.inventory_tab, text="")
+        notebook.add(self.orders_tab, text="")
+        notebook.add(self.transactions_tab, text="")
 
         self._build_dashboard()
         self._build_products_tab()
@@ -130,9 +138,26 @@ class AdminApp:
         self._build_orders_tab()
         self._build_transactions_tab()
 
+        self.apply_language()
         self.refresh_all()
         self.schedule_orders_refresh()
         self.open_site_settings_window()
+
+    def t(self, key: str) -> str:
+        return admin_tr(self.language_code, key)
+
+    def apply_language(self) -> None:
+        settings = get_site_settings()
+        self.language_code = normalize_language(settings.get("language_code"))
+        self.root.title(self.t("title"))
+        self.web_button.config(text=self.t("btn_web"))
+        self.currency_button.config(text=self.t("btn_currency"))
+        self.language_button.config(text=self.t("btn_language"))
+        self.notebook.tab(self.dashboard_tab, text=self.t("tab_dashboard"))
+        self.notebook.tab(self.products_tab, text=self.t("tab_products"))
+        self.notebook.tab(self.inventory_tab, text=self.t("tab_inventory"))
+        self.notebook.tab(self.orders_tab, text=self.t("tab_orders"))
+        self.notebook.tab(self.transactions_tab, text=self.t("tab_transactions"))
 
     def _build_dashboard(self) -> None:
         self.dashboard_cards = {}
@@ -1184,6 +1209,49 @@ class AdminApp:
         conn.commit()
         conn.close()
         self.refresh_all()
+
+    def open_language_window(self) -> None:
+        if self.language_window and self.language_window.winfo_exists():
+            self.language_window.lift()
+            self.language_window.focus_force()
+            return
+
+        self.apply_language()
+        self.language_window = Toplevel(self.root)
+        self.language_window.title(self.t("language_window_title"))
+        self.language_window.geometry("420x180")
+        self.language_window.resizable(False, False)
+
+        frame = ttk.Frame(self.language_window, padding=16)
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text=self.t("language_label"), wraplength=360).pack(anchor="w", pady=(0, 8))
+
+        self.language_var = StringVar(value=self.language_code)
+        values = [f"{code} - {name}" for code, name in SUPPORTED_LANGUAGES.items()]
+        self.language_combo = ttk.Combobox(frame, values=values, state="readonly", width=32)
+        self.language_combo.pack(anchor="w", fill="x")
+        selected = next((v for v in values if v.startswith(f"{self.language_code} - ")), values[0])
+        self.language_combo.set(selected)
+
+        ttk.Button(frame, text=self.t("language_confirm"), command=self.save_language_selection).pack(anchor="e", pady=(14, 0))
+
+    def save_language_selection(self) -> None:
+        if not hasattr(self, "language_combo"):
+            return
+        selected = self.language_combo.get().strip()
+        language_code = normalize_language(selected.split(" - ", 1)[0] if selected else "fr")
+
+        conn = get_connection()
+        conn.execute("UPDATE site_settings SET language_code = ? WHERE id = 1", (language_code,))
+        conn.commit()
+        conn.close()
+
+        self.apply_language()
+
+        if self.language_window and self.language_window.winfo_exists():
+            self.language_window.destroy()
+
+        messagebox.showinfo("OK", self.t("language_updated"))
 
     def open_currency_window(self) -> None:
         if self.currency_window and self.currency_window.winfo_exists():

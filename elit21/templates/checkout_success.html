@@ -2,7 +2,7 @@
 
 {% block content %}
 <section class="auth-container">
-  <h2>Paiement confirmé ✅</h2>
+  <h2>{{ tr("paid_success") }}</h2>
   <p class="muted">Merci pour votre commande. Votre transaction est validée et en préparation.</p>
   <div class="summary-row">
     <span>Commande</span>
@@ -16,6 +16,6 @@
     <span>Total payé</span>
     <span>{{ format_money(order['total']) }}</span>
   </div>
-  <p style="margin-top: 1rem;"><a href="{{ url_for('index') }}">Retour à la boutique</a></p>
+  <p style="margin-top: 1rem;"><a href="{{ url_for('index') }}">{{ tr("back_store") }}</a></p>
 </section>
 {% endblock %}
