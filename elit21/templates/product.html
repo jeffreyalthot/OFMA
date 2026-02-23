@@ -6,9 +6,9 @@
     <h2>{{ product['name'] }}</h2>
     <p>{{ product['description'] }}</p>
     <div class="price">{{ format_money(product['price']) }}</div>
-    <p><strong>Stock:</strong> {{ product['stock'] }}</p>
+    <p><strong>{{ tr('stock_label') }}:</strong> {{ product['stock'] }}</p>
     <div class="product-options">
-      <label for="color"><strong>Couleur</strong></label>
+      <label for="color"><strong>{{ tr("color") }}</strong></label>
       <select id="color" name="color" form="add-to-cart">
         <option value="">--</option>
         {% for color in colors %}
@@ -16,15 +16,15 @@
         {% endfor %}
       </select>
 
-      <label for="size"><strong>Taille</strong></label>
-      <input id="size" name="size" form="add-to-cart" list="size-options" placeholder="Ex: M, 42, 7 1/4" />
+      <label for="size"><strong>{{ tr("size") }}</strong></label>
+      <input id="size" name="size" form="add-to-cart" list="size-options" placeholder="{{ tr('size_placeholder') }}" />
       <datalist id="size-options">
         {% for size in sizes %}
           <option value="{{ size }}"></option>
         {% endfor %}
       </datalist>
 
-      <label for="category"><strong>Catégorie</strong></label>
+      <label for="category"><strong>{{ tr("category") }}</strong></label>
       <select id="category" name="category" form="add-to-cart">
         <option value="">--</option>
         {% if product['category'] %}
@@ -32,14 +32,14 @@
         {% endif %}
       </select>
     </div>
-    <p class="badge">Paiement sécurisé via PayPal</p>
+    <p class="badge">{{ tr("paypal_secure_badge") }}</p>
     <form id="add-to-cart" class="cart-add" method="post" action="{{ url_for('add_to_cart', product_id=product['id']) }}">
-      <button type="submit">Ajouter au panier</button>
+      <button type="submit">{{ tr("add_to_cart") }}</button>
     </form>
-    <button class="text-button" type="button" onclick="history.back()">Retour</button>
+    <button class="text-button" type="button" onclick="history.back()">{{ tr("back") }}</button>
     {% if inventory %}
       <div class="inventory-block">
-        <h4>Disponibilités par variante</h4>
+        <h4>{{ tr("inventory_by_variant") }}</h4>
         <ul>
           {% for row in inventory %}
             <li>{{ row['color'] }} / {{ row['size'] }} : {{ row['quantity'] }}</li>
@@ -62,8 +62,8 @@
     </div>
     {% if images|length > 1 %}
       <div class="gallery-controls">
-        <button id="gallery-prev" type="button" aria-label="Image précédente">&#8592;</button>
-        <button id="gallery-next" type="button" aria-label="Image suivante">&#8594;</button>
+        <button id="gallery-prev" type="button" aria-label="{{ tr('image_previous') }}">&#8592;</button>
+        <button id="gallery-next" type="button" aria-label="{{ tr('image_next') }}">&#8594;</button>
       </div>
       <script>
         (() => {

@@ -115,8 +115,14 @@ def create_app():
     def parse_cart_key(cart_key: str) -> tuple[int, str, str]:
         parts = cart_key.split("|", 2)
         if len(parts) != 3:
-            raise ValueError("Clé panier invalide.")
+            raise ValueError("Invalid cart key.")
         return int(parts[0]), parts[1], parts[2]
+
+    def current_language() -> str:
+        return normalize_language(get_site_settings().get("language_code"))
+
+    def t(key: str) -> str:
+        return tr(current_language(), key)
 
     def cart_count() -> int:
         return sum(get_cart().values())
@@ -421,7 +427,7 @@ def create_app():
         @wraps(view_func)
         def wrapper(*args, **kwargs):
             if "user_id" not in session:
-                flash("Veuillez vous connecter pour continuer.")
+                flash(t("auth_login_required"))
                 return redirect(url_for("login"))
             return view_func(*args, **kwargs)
 
@@ -477,7 +483,7 @@ def create_app():
         ).fetchall()
         conn.close()
         if not product:
-            flash("Article introuvable.")
+            flash(t("product_not_found"))
             return redirect(url_for("index"))
         colors = sorted({row["color"] for row in inventory})
         sizes = sorted({row["size"] for row in inventory})
@@ -519,23 +525,23 @@ def create_app():
         ).fetchone()
         conn.close()
         if not product or product["status"] != "active":
-            flash("Article indisponible.")
+            flash(t("product_unavailable"))
             return redirect(url_for("index"))
         if not color or not size:
-            flash("Veuillez sélectionner une couleur et une taille.")
+            flash(t("select_color_size"))
             return redirect(url_for("product_detail", product_id=product_id))
         if not inventory_row or inventory_row["quantity"] <= 0:
-            flash("Article en rupture de stock.")
+            flash(t("out_of_stock"))
             return redirect(url_for("product_detail", product_id=product_id))
         cart = get_cart()
         cart_key = build_cart_key(product_id, color, size)
         current_quantity = cart.get(cart_key, 0)
         if current_quantity + 1 > inventory_row["quantity"]:
-            flash("Stock insuffisant pour cette variante.")
+            flash(t("insufficient_stock_variant"))
             return redirect(url_for("product_detail", product_id=product_id))
         cart[cart_key] = current_quantity + 1
         session["cart"] = cart
-        flash("Article ajouté au panier.")
+        flash(t("added_to_cart"))
         return redirect(url_for("cart"))
 
     @app.route("/cart/update", methods=["POST"])
@@ -543,7 +549,7 @@ def create_app():
         quantity_str = request.form.get("quantity", "").strip()
         cart_key = request.form.get("cart_key", "").strip()
         if not quantity_str.isdigit():
-            flash("Quantité invalide.")
+            flash(t("invalid_quantity"))
             return redirect(url_for("cart"))
         quantity = int(quantity_str)
         cart = get_cart()
@@ -563,7 +569,7 @@ def create_app():
                 ).fetchone()
                 conn.close()
                 if not inventory_row or quantity > inventory_row["quantity"]:
-                    flash("Stock insuffisant pour cette variante.")
+                    flash(t("insufficient_stock_variant"))
                     return redirect(url_for("cart"))
                 cart[cart_key] = quantity
         session["cart"] = cart
@@ -597,7 +603,7 @@ def create_app():
             full_name = request.form.get("full_name", "").strip()
             password = request.form.get("password", "")
             if not email or not full_name or not password:
-                flash("Tous les champs sont obligatoires.")
+                flash(t("all_fields_required"))
                 return redirect(url_for("register"))
             password_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
             conn = get_connection()
@@ -609,10 +615,10 @@ def create_app():
                 conn.commit()
             except Exception:
                 conn.close()
-                flash("Compte déjà existant ou erreur de sauvegarde.")
+                flash(t("account_exists_or_save_error"))
                 return redirect(url_for("register"))
             conn.close()
-            flash("Compte créé avec succès. Vous pouvez vous connecter.")
+            flash(t("account_created_login"))
             return redirect(url_for("login"))
         return render_template("register.html")
 
@@ -629,7 +635,7 @@ def create_app():
             ).fetchone()
             conn.close()
             if not user:
-                flash("Identifiants invalides.")
+                flash(t("invalid_credentials"))
                 return redirect(url_for("login"))
             session["user_id"] = user["id"]
             session["user_name"] = user["full_name"]
@@ -646,7 +652,7 @@ def create_app():
     def checkout():
         items, subtotal = load_cart_items()
         if not items:
-            flash("Votre panier est vide.")
+            flash(t("empty_cart"))
             return redirect(url_for("cart"))
         shipping_fee = get_shipping_fee()
         total = subtotal + shipping_fee
@@ -682,7 +688,7 @@ def create_app():
         )
         if not shipping_data:
             app.logger.warning("[paypal-debug] create_order rejected: incomplete shipping data")
-            return jsonify({"error": "Adresse de livraison incomplète."}), 400
+            return jsonify({"error": t("shipping_address_incomplete")}), 400
         items, subtotal = load_cart_items()
         if not items:
             app.logger.warning("[paypal-debug] create_order rejected: empty cart")
@@ -762,7 +768,7 @@ def create_app():
                     item["size"],
                     item["quantity"],
                 )
-                return jsonify({"error": "Stock insuffisant pour finaliser la commande."}), 409
+                return jsonify({"error": t("insufficient_stock_checkout")}), 409
             cursor.execute(
                 """
                 INSERT INTO order_items (order_id, product_id, product_name, color, size, quantity, price)
@@ -837,7 +843,7 @@ def create_app():
                 order_id,
                 paypal_order,
             )
-            return jsonify({"error": "Réponse PayPal invalide."}), 502
+            return jsonify({"error": t("invalid_paypal_response")}), 502
         cursor.execute(
             "UPDATE orders SET payment_status = ? WHERE id = ?",
             (f"paypal_order:{paypal_order_id}", order_id),
@@ -898,7 +904,7 @@ def create_app():
         if not order:
             conn.close()
             app.logger.warning("[paypal-debug] capture_order rejected: order not found")
-            return {"error": "Commande introuvable."}, 404
+            return {"error": t("order_not_found")}, 404
         if order["customer_email"] != current_user["email"]:
             conn.close()
             app.logger.warning(
@@ -913,7 +919,7 @@ def create_app():
                 order["id"],
                 order["payment_status"],
             )
-            return {"error": "Commande PayPal incohérente."}, 409
+            return {"error": t("paypal_order_mismatch")}, 409
         local_order_id = order["id"]
         try:
             capture = paypal_request(
@@ -968,7 +974,7 @@ def create_app():
                 expected_reference,
                 reference_id,
             )
-            return {"error": "Commande PayPal incohérente (reference)."}, 409
+            return {"error": t("paypal_order_mismatch_reference")}, 409
         if capture_currency and capture_currency != expected_currency:
             conn.close()
             app.logger.error(
@@ -1007,7 +1013,7 @@ def create_app():
                     local_order_id,
                     item["product_id"],
                 )
-                return {"error": "Stock insuffisant après confirmation de paiement."}, 409
+                return {"error": t("insufficient_stock_after_payment")}, 409
         cursor = conn.cursor()
         for item in order_items:
             inventory = conn.execute(
@@ -1088,7 +1094,7 @@ def create_app():
             local_order_id=local_order_id,
         )
         if status_code != 200:
-            flash(response.get("error") or "Paiement PayPal non confirmé.")
+            flash(response.get("error") or t("paypal_payment_not_confirmed"))
             return redirect(url_for("checkout"))
         return redirect(response["redirect_url"])
 
@@ -1100,7 +1106,7 @@ def create_app():
             session.get("user_id"),
             request.args.get("token"),
         )
-        flash("Paiement PayPal annulé. Vous pouvez réessayer.")
+        flash(t("paypal_payment_cancelled_retry"))
         return redirect(url_for("checkout"))
 
     @app.route("/checkout/success/<int:order_id>")
@@ -1121,7 +1127,7 @@ def create_app():
             or order["customer_email"] != current_user["email"]
             or not str(order["payment_status"]).startswith("paid:")
         ):
-            flash("Commande non confirmée.")
+            flash(t("order_not_confirmed"))
             return redirect(url_for("checkout"))
         return render_template("checkout_success.html", order=order)
 

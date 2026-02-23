@@ -3,17 +3,17 @@
 {% block content %}
 <section class="auth-container">
   <h2>{{ tr("paid_success") }}</h2>
-  <p class="muted">Merci pour votre commande. Votre transaction est validée et en préparation.</p>
+  <p class="muted">{{ tr("thanks_order") }}</p>
   <div class="summary-row">
-    <span>Commande</span>
+    <span>{{ tr("order") }}</span>
     <span>#{{ order['id'] }}</span>
   </div>
   <div class="summary-row">
-    <span>Statut paiement</span>
+    <span>{{ tr("payment_status") }}</span>
     <span>{{ order['payment_status'] }}</span>
   </div>
   <div class="summary-row total">
-    <span>Total payé</span>
+    <span>{{ tr("total_paid") }}</span>
     <span>{{ format_money(order['total']) }}</span>
   </div>
   <p style="margin-top: 1rem;"><a href="{{ url_for('index') }}">{{ tr("back_store") }}</a></p>
