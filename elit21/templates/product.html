@@ -17,12 +17,12 @@
       </select>
 
       <label for="size"><strong>Taille</strong></label>
-      <select id="size" name="size" form="add-to-cart">
-        <option value="">--</option>
+      <input id="size" name="size" form="add-to-cart" list="size-options" placeholder="Ex: M, 42, 7 1/4" />
+      <datalist id="size-options">
         {% for size in sizes %}
-          <option value="{{ size }}">{{ size }}</option>
+          <option value="{{ size }}"></option>
         {% endfor %}
-      </select>
+      </datalist>
 
       <label for="category"><strong>Catégorie</strong></label>
       <select id="category" name="category" form="add-to-cart">
