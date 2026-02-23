@@ -83,9 +83,6 @@ def is_placeholder_paypal_credential(value: str) -> bool:
     }
 
 
-SHIPPING_FEE = float(os.getenv("SHIPPING_FEE", "9.99"))
-
-
 def paypal_base_url(paypal_env: str) -> str:
     return (
         "https://api-m.paypal.com"
@@ -347,6 +344,15 @@ def create_app():
     def get_site_settings_payload() -> dict[str, str]:
         return get_site_settings()
 
+    def get_shipping_fee() -> float:
+        settings = get_site_settings_payload()
+        raw_shipping_fee = str(settings.get("shipping_fee") or "0").strip()
+        try:
+            shipping_fee = Decimal(raw_shipping_fee)
+        except Exception:
+            shipping_fee = Decimal("0")
+        return float(shipping_fee.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
     def get_currency_payload() -> dict[str, str]:
         settings = get_site_settings_payload()
         currency_code = str(settings.get("currency_code") or "CAD").upper()
@@ -487,12 +493,13 @@ def create_app():
     @app.route("/cart")
     def cart():
         items, subtotal = load_cart_items()
-        total = subtotal + (SHIPPING_FEE if items else 0.0)
+        shipping_fee = get_shipping_fee()
+        total = subtotal + (shipping_fee if items else 0.0)
         return render_template(
             "cart.html",
             items=items,
             subtotal=subtotal,
-            shipping_fee=SHIPPING_FEE,
+            shipping_fee=shipping_fee,
             total=total,
         )
 
@@ -641,7 +648,8 @@ def create_app():
         if not items:
             flash("Votre panier est vide.")
             return redirect(url_for("cart"))
-        total = subtotal + SHIPPING_FEE
+        shipping_fee = get_shipping_fee()
+        total = subtotal + shipping_fee
         currency = get_currency_payload()
         return render_template(
             "checkout.html",
@@ -650,7 +658,7 @@ def create_app():
             paypal_debug_enabled=paypal_debug_enabled(),
             items=items,
             subtotal=subtotal,
-            shipping_fee=SHIPPING_FEE,
+            shipping_fee=shipping_fee,
             total=total,
             paypal_configured=ensure_paypal_configured()[0],
             paypal_currency_code=currency["code"],
@@ -680,7 +688,8 @@ def create_app():
             app.logger.warning("[paypal-debug] create_order rejected: empty cart")
             return jsonify({"error": "Votre panier est vide."}), 400
         subtotal_money = to_money(subtotal)
-        shipping_fee_money = to_money(SHIPPING_FEE)
+        shipping_fee = get_shipping_fee()
+        shipping_fee_money = to_money(shipping_fee)
         total_money = to_money(subtotal_money + shipping_fee_money)
         currency_code = get_currency_payload()["code"]
         paypal_items = []
@@ -728,7 +737,7 @@ def create_app():
                 shipping_data["address"],
                 "pending",
                 "pending",
-                SHIPPING_FEE,
+                shipping_fee,
                 float(total_money),
                 datetime.utcnow().isoformat(),
             ),
