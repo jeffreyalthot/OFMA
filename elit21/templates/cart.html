@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2 class="section-title">Votre panier</h2>
+<h2 class="section-title">{{ tr("cart_title") }}</h2>
 
 {% if items %}
   <div class="cart-grid">
@@ -18,11 +18,11 @@
             <form method="post" action="{{ url_for('update_cart_item') }}">
               <input type="hidden" name="cart_key" value="{{ item.cart_key }}" />
               <input type="number" min="1" name="quantity" value="{{ item.quantity }}" />
-              <button type="submit">Mettre à jour</button>
+              <button type="submit">{{ tr("cart_update") }}</button>
             </form>
             <form method="post" action="{{ url_for('remove_cart_item') }}">
               <input type="hidden" name="cart_key" value="{{ item.cart_key }}" />
-              <button class="text-button" type="submit">Retirer</button>
+              <button class="text-button" type="submit">{{ tr("cart_remove") }}</button>
             </form>
           </div>
           <div class="cart-line-total">
@@ -32,26 +32,26 @@
       {% endfor %}
     </div>
     <div class="cart-summary">
-      <h3>Facture client</h3>
+      <h3>{{ tr("invoice") }}</h3>
       <div class="summary-row">
-        <span>Sous-total</span>
+        <span>{{ tr("subtotal") }}</span>
         <span>{{ format_money(subtotal) }}</span>
       </div>
       <div class="summary-row">
-        <span>Livraison</span>
+        <span>{{ tr("shipping") }}</span>
         <span>{{ format_money(shipping_fee) }}</span>
       </div>
       <div class="summary-row total">
-        <span>Total TTC</span>
+        <span>{{ tr("total_ttc") }}</span>
         <span>{{ format_money(total) }}</span>
       </div>
-      <a class="cta" href="{{ url_for('checkout') }}">Passer au paiement</a>
+      <a class="cta" href="{{ url_for('checkout') }}">{{ tr("go_checkout") }}</a>
     </div>
   </div>
 {% else %}
   <div class="auth-container">
-    <p>Votre panier est vide.</p>
-    <a class="cta" href="{{ url_for('index') }}">Retour au market</a>
+    <p>{{ tr("empty_cart") }}</p>
+    <a class="cta" href="{{ url_for('index') }}">{{ tr("continue_shop") }}</a>
   </div>
 {% endif %}
 {% endblock %}

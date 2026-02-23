@@ -2,11 +2,11 @@
 
 {% block content %}
 <div class="auth-container">
-  <h2>Connexion</h2>
+  <h2>{{ tr("login") }}</h2>
   <form method="post">
-    <input type="email" name="email" placeholder="Email" required />
-    <input type="password" name="password" placeholder="Mot de passe" required />
-    <button type="submit">Se connecter</button>
+    <input type="email" name="email" placeholder="{{ tr('email') }}" required />
+    <input type="password" name="password" placeholder="{{ tr('password') }}" required />
+    <button type="submit">{{ tr("login_submit") }}</button>
   </form>
 </div>
 {% endblock %}

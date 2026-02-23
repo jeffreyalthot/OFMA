@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="{{ current_language }}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -11,14 +11,14 @@
     <nav>
       <div class="logo" id="site-name-logo">{{ site_settings["site_name"] }}</div>
       <div>
-        <a href="{{ url_for('index') }}">Market</a>
-        <a href="{{ url_for('cart') }}">Panier ({{ cart_count }})</a>
+        <a href="{{ url_for('index') }}">{{ tr("nav_market") }}</a>
+        <a href="{{ url_for('cart') }}">{{ tr("nav_cart") }} ({{ cart_count }})</a>
         {% if session.get('user_id') %}
-        <a href="{{ url_for('checkout') }}">Checkout</a>
-        <a href="{{ url_for('logout') }}">Déconnexion</a>
+        <a href="{{ url_for('checkout') }}">{{ tr("nav_checkout") }}</a>
+        <a href="{{ url_for('logout') }}">{{ tr("nav_logout") }}</a>
         {% else %}
-        <a href="{{ url_for('login') }}">Connexion</a>
-        <a href="{{ url_for('register') }}">Inscription</a>
+        <a href="{{ url_for('login') }}">{{ tr("nav_login") }}</a>
+        <a href="{{ url_for('register') }}">{{ tr("nav_register") }}</a>
         {% endif %}
       </div>
     </nav>
@@ -35,7 +35,7 @@
   </main>
 
   <footer>
-    <p><span id="footer-site-name">{{ site_settings["site_name"] }}</span> &copy; 2024 - Marketplace premium sécurisé.</p>
+    <p><span id="footer-site-name">{{ site_settings["site_name"] }}</span> &copy; 2024 - {{ tr("footer_secure") }}</p>
   </footer>
 
   <script>
@@ -49,6 +49,10 @@
 
       function applySettingsLive(settings) {
         if (!settings) return;
+        if (settings.language_code && settings.language_code !== document.documentElement.lang) {
+          window.location.reload();
+          return;
+        }
         document.title = settings.site_name || document.title;
         document.body.style.setProperty('--header-primary', settings.header_bg_color || '#0c1f4c');
         document.body.style.setProperty('--header-secondary', settings.header_secondary_color || '#1f3a7a');

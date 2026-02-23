@@ -3,8 +3,8 @@
 {% block content %}
 <div class="checkout-grid">
   <div class="checkout-form">
-    <h2>Checkout sécurisé</h2>
-    <p>Complétez vos coordonnées puis confirmez le paiement via PayPal ou carte crédit/débit.</p>
+    <h2>{{ tr("secure_checkout") }}</h2>
+    <p>{{ tr("checkout_intro") }}</p>
     <form id="checkout-form" class="order-form">
       <label for="customer_name">Nom et prénom</label>
       <input id="customer_name" name="customer_name" placeholder="Nom complet du client" required />
@@ -50,7 +50,7 @@
   </div>
 
   <div class="checkout-summary">
-    <h3>Facture client</h3>
+    <h3>{{ tr("invoice") }}</h3>
     <ul>
       {% for item in items %}
         <li>
@@ -60,15 +60,15 @@
       {% endfor %}
     </ul>
     <div class="summary-row">
-      <span>Sous-total</span>
+      <span>{{ tr("subtotal") }}</span>
       <span>{{ format_money(subtotal) }}</span>
     </div>
     <div class="summary-row">
-      <span>Livraison</span>
+      <span>{{ tr("shipping") }}</span>
       <span>{{ format_money(shipping_fee) }}</span>
     </div>
     <div class="summary-row total">
-      <span>Total TTC</span>
+      <span>{{ tr("total_ttc") }}</span>
       <span>{{ format_money(total) }}</span>
     </div>
   </div>

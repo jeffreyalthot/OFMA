@@ -23,6 +23,7 @@ from flask import (
 )
 
 from elit21.db import CURRENCY_OPTIONS, get_connection, get_site_settings, init_db
+from elit21.i18n import normalize_language, tr
 
 
 def load_env_file() -> None:
@@ -399,11 +400,15 @@ def create_app():
 
     @app.context_processor
     def inject_cart_metrics():
+        settings = get_site_settings_payload()
+        language_code = normalize_language(settings.get("language_code"))
         return {
             "cart_count": cart_count(),
-            "site_settings": get_site_settings_payload(),
+            "site_settings": settings,
             "currency": get_currency_payload(),
             "format_money": format_money,
+            "current_language": language_code,
+            "tr": lambda key: tr(language_code, key),
         }
 
     def login_required(view_func):
