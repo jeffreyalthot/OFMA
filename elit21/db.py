@@ -33,6 +33,7 @@ DEFAULT_SITE_SETTINGS = {
     "ad_bg_color": "#ffffff",
     "ad_text_color": "#0c1f4c",
     "currency_code": "CAD",
+    "shipping_fee": "9.99",
     "language_code": "fr",
 }
 

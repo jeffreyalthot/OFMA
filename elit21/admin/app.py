@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import html
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from tkinter import (
     Canvas,
     Tk,
@@ -105,6 +106,7 @@ class AdminApp:
         self.currency_code = "CAD"
         self.language_code = "fr"
         self.language_window: Toplevel | None = None
+        self.shipping_window: Toplevel | None = None
 
         top_bar = ttk.Frame(root, padding=(10, 6))
         top_bar.pack(fill="x")
@@ -112,6 +114,8 @@ class AdminApp:
         self.web_button.pack(side="left")
         self.currency_button = ttk.Button(top_bar, command=self.open_currency_window)
         self.currency_button.pack(side="left", padx=(8, 0))
+        self.shipping_button = ttk.Button(top_bar, command=self.open_shipping_window)
+        self.shipping_button.pack(side="left", padx=(8, 0))
         self.language_button = ttk.Button(top_bar, command=self.open_language_window)
         self.language_button.pack(side="left", padx=(8, 0))
 
@@ -152,6 +156,7 @@ class AdminApp:
         self.web_button.config(text=self.t("btn_web"))
         self.currency_button.config(text=self.t("btn_currency"))
         self.language_button.config(text=self.t("btn_language"))
+        self.shipping_button.config(text=self.t("btn_shipping"))
         self.notebook.tab(self.dashboard_tab, text=self.t("tab_dashboard"))
         self.notebook.tab(self.products_tab, text=self.t("tab_products"))
         self.notebook.tab(self.inventory_tab, text=self.t("tab_inventory"))
@@ -1239,6 +1244,69 @@ class AdminApp:
             self.language_window.destroy()
 
         messagebox.showinfo("OK", self.t("language_updated"))
+
+    def open_shipping_window(self) -> None:
+        if self.shipping_window and self.shipping_window.winfo_exists():
+            self.shipping_window.lift()
+            self.shipping_window.focus_force()
+            return
+
+        self.refresh_currency_settings()
+        settings = get_site_settings()
+        current_value = str(settings.get("shipping_fee") or "9.99").strip()
+
+        self.shipping_window = Toplevel(self.root)
+        self.shipping_window.title("Prix livraison")
+        self.shipping_window.geometry("420x220")
+        self.shipping_window.resizable(False, False)
+
+        frame = ttk.Frame(self.shipping_window, padding=16)
+        frame.pack(fill="both", expand=True)
+
+        currency_label = self.get_currency_label()
+        ttk.Label(
+            frame,
+            text=f"Définissez le prix de livraison pour {currency_label} (site + PayPal):",
+            wraplength=360,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 10))
+
+        self.shipping_fee_var = StringVar(value=current_value)
+        ttk.Entry(frame, textvariable=self.shipping_fee_var, width=24).pack(anchor="w")
+
+        ttk.Button(
+            frame,
+            text="Confirmer",
+            command=self.save_shipping_fee,
+        ).pack(anchor="e", pady=(16, 0))
+
+    def save_shipping_fee(self) -> None:
+        if not hasattr(self, "shipping_fee_var"):
+            return
+
+        raw_value = self.shipping_fee_var.get().strip().replace(",", ".")
+        try:
+            shipping_fee = Decimal(raw_value)
+        except InvalidOperation:
+            messagebox.showerror("Erreur", "Prix de livraison invalide.")
+            return
+
+        if shipping_fee < Decimal("0"):
+            messagebox.showerror("Erreur", "Le prix de livraison doit être positif.")
+            return
+
+        shipping_fee = shipping_fee.quantize(Decimal("0.01"))
+
+        conn = get_connection()
+        conn.execute("UPDATE site_settings SET shipping_fee = ? WHERE id = 1", (f"{shipping_fee:.2f}",))
+        conn.commit()
+        conn.close()
+
+        self.refresh_all()
+        if self.shipping_window and self.shipping_window.winfo_exists():
+            self.shipping_window.destroy()
+
+        messagebox.showinfo("Succès", f"Prix de livraison mis à jour: {self.format_money(float(shipping_fee))}.")
 
     def open_currency_window(self) -> None:
         if self.currency_window and self.currency_window.winfo_exists():
