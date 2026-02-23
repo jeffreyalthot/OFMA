@@ -7,6 +7,7 @@ CURRENCY_OPTIONS = {
     "CAD": {"name": "Dollar canadien", "symbol": "$ CA"},
     "USD": {"name": "Dollar américain", "symbol": "$ US"},
     "EUR": {"name": "Euro", "symbol": "€"},
+    "CNY": {"name": "Yuan chinois", "symbol": "¥"},
     "JPY": {"name": "Yen japonais", "symbol": "¥"},
     "GBP": {"name": "Livre sterling", "symbol": "£"},
 }
