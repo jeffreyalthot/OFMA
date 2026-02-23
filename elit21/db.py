@@ -3,6 +3,28 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent / "elit21.db"
 
+DEFAULT_SITE_SETTINGS = {
+    "site_name": "ELIT21",
+    "site_name_font": "Segoe UI",
+    "header_bg_color": "#0c1f4c",
+    "header_secondary_color": "#1f3a7a",
+    "page_bg_color": "#f5f7fb",
+    "promo_badge_text": "Marketplace premium",
+    "promo_title_text": "Le marché ELIT21 pour des achats d'exception.",
+    "promo_description_text": (
+        "Découvrez une expérience d'achat fluide, sécurisée et inspirante. ELIT21 propose un "
+        "espace de vente moderne prêt à accueillir vos articles premium, avec paiement PayPal."
+    ),
+    "promo_card_1_title": "PayPal sécurisé",
+    "promo_card_1_value": "24/7",
+    "promo_card_2_title": "Support VIP",
+    "promo_card_2_value": "Premium",
+    "promo_card_3_title": "Trust score",
+    "promo_card_3_value": "98%",
+    "ad_bg_color": "#ffffff",
+    "ad_text_color": "#0c1f4c",
+}
+
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -14,6 +36,83 @@ def get_connection():
 def init_db():
     conn = get_connection()
     cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS site_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            site_name TEXT NOT NULL,
+            site_name_font TEXT NOT NULL,
+            header_bg_color TEXT NOT NULL,
+            header_secondary_color TEXT NOT NULL,
+            page_bg_color TEXT NOT NULL,
+            promo_badge_text TEXT NOT NULL,
+            promo_title_text TEXT NOT NULL,
+            promo_description_text TEXT NOT NULL,
+            promo_card_1_title TEXT NOT NULL,
+            promo_card_1_value TEXT NOT NULL,
+            promo_card_2_title TEXT NOT NULL,
+            promo_card_2_value TEXT NOT NULL,
+            promo_card_3_title TEXT NOT NULL,
+            promo_card_3_value TEXT NOT NULL,
+            ad_bg_color TEXT NOT NULL,
+            ad_text_color TEXT NOT NULL
+        )
+        """
+    )
+
+    cursor.execute(
+        "SELECT id FROM site_settings WHERE id = 1"
+    )
+    existing_settings = cursor.fetchone()
+    if not existing_settings:
+        cursor.execute(
+            """
+            INSERT INTO site_settings (
+                id, site_name, site_name_font, header_bg_color, header_secondary_color,
+                page_bg_color, promo_badge_text, promo_title_text, promo_description_text,
+                promo_card_1_title, promo_card_1_value, promo_card_2_title, promo_card_2_value,
+                promo_card_3_title, promo_card_3_value, ad_bg_color, ad_text_color
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                1,
+                DEFAULT_SITE_SETTINGS["site_name"],
+                DEFAULT_SITE_SETTINGS["site_name_font"],
+                DEFAULT_SITE_SETTINGS["header_bg_color"],
+                DEFAULT_SITE_SETTINGS["header_secondary_color"],
+                DEFAULT_SITE_SETTINGS["page_bg_color"],
+                DEFAULT_SITE_SETTINGS["promo_badge_text"],
+                DEFAULT_SITE_SETTINGS["promo_title_text"],
+                DEFAULT_SITE_SETTINGS["promo_description_text"],
+                DEFAULT_SITE_SETTINGS["promo_card_1_title"],
+                DEFAULT_SITE_SETTINGS["promo_card_1_value"],
+                DEFAULT_SITE_SETTINGS["promo_card_2_title"],
+                DEFAULT_SITE_SETTINGS["promo_card_2_value"],
+                DEFAULT_SITE_SETTINGS["promo_card_3_title"],
+                DEFAULT_SITE_SETTINGS["promo_card_3_value"],
+                DEFAULT_SITE_SETTINGS["ad_bg_color"],
+                DEFAULT_SITE_SETTINGS["ad_text_color"],
+            ),
+        )
+
+    cursor.execute("PRAGMA table_info(site_settings)")
+    setting_columns = {row[1] for row in cursor.fetchall()}
+    for column_name, default_value in DEFAULT_SITE_SETTINGS.items():
+        if column_name not in setting_columns:
+            escaped_default = str(default_value).replace("'", "''")
+            cursor.execute(
+                f"ALTER TABLE site_settings ADD COLUMN {column_name} TEXT NOT NULL DEFAULT '{escaped_default}'",
+            )
+
+    cursor.execute(
+        "UPDATE site_settings SET "
+        + ", ".join(
+            [f"{column_name} = COALESCE({column_name}, ?)" for column_name in DEFAULT_SITE_SETTINGS]
+        )
+        + " WHERE id = 1",
+        tuple(DEFAULT_SITE_SETTINGS.values()),
+    )
 
     cursor.execute(
         """
@@ -134,6 +233,17 @@ def init_db():
 
     conn.commit()
     conn.close()
+
+
+def get_site_settings() -> dict[str, str]:
+    init_db()
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM site_settings WHERE id = 1").fetchone()
+    conn.close()
+    settings = dict(DEFAULT_SITE_SETTINGS)
+    if row:
+        settings.update({key: str(row[key]) for key in settings.keys() if row[key] is not None})
+    return settings
 
 
 def seed_defaults():

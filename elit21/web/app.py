@@ -22,7 +22,7 @@ from flask import (
     url_for,
 )
 
-from elit21.db import get_connection, init_db
+from elit21.db import get_connection, get_site_settings, init_db
 
 
 def load_env_file() -> None:
@@ -343,6 +343,9 @@ def create_app():
             "postal_code": postal_code,
         }
 
+    def get_site_settings_payload() -> dict[str, str]:
+        return get_site_settings()
+
     def load_cart_items():
         cart = get_cart()
         if not cart:
@@ -379,7 +382,7 @@ def create_app():
 
     @app.context_processor
     def inject_cart_metrics():
-        return {"cart_count": cart_count()}
+        return {"cart_count": cart_count(), "site_settings": get_site_settings_payload()}
 
     def login_required(view_func):
         @wraps(view_func)
@@ -390,6 +393,10 @@ def create_app():
             return view_func(*args, **kwargs)
 
         return wrapper
+
+    @app.route("/api/site-settings")
+    def api_site_settings():
+        return jsonify(get_site_settings_payload())
 
     @app.route("/")
     def index():
@@ -413,6 +420,7 @@ def create_app():
             products=products,
             paypal_client_id=get_paypal_settings()["client_id"],
             paypal_env=get_paypal_settings()["env"],
+            site_settings=get_site_settings_payload(),
         )
 
     @app.route("/product/<int:product_id>")
