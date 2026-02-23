@@ -6,6 +6,11 @@
   --accent: #f9c74f;
   --muted: #6b7280;
   --surface: #ffffff;
+  --header-primary: #0c1f4c;
+  --header-secondary: #1f3a7a;
+  --ad-bg: #ffffff;
+  --ad-text: #0c1f4c;
+  --site-font: "Segoe UI";
   --shadow: 0 20px 50px rgba(15, 23, 42, 0.12);
 }
 
@@ -22,7 +27,7 @@ body {
 }
 
 header {
-  background: linear-gradient(120deg, var(--primary), var(--secondary));
+  background: linear-gradient(120deg, var(--header-primary), var(--header-secondary));
   color: #fff;
   padding: 2.5rem 6vw;
 }
@@ -35,6 +40,7 @@ nav {
 }
 
 nav .logo {
+  font-family: var(--site-font), "Segoe UI", "Inter", sans-serif;
   font-size: 1.8rem;
   font-weight: 700;
   letter-spacing: 2px;
@@ -93,7 +99,8 @@ main {
 }
 
 .card {
-  background: var(--surface);
+  background: var(--ad-bg);
+  color: var(--ad-text);
   width: 3cm;
   height: 6cm;
   border-radius: 10px;
@@ -127,7 +134,7 @@ main {
 }
 
 .card-content p {
-  color: var(--muted);
+  color: var(--ad-text);
   font-size: 0.52rem;
   line-height: 1.2;
   overflow: hidden;
@@ -394,7 +401,8 @@ footer {
 }
 
 .dashboard-card {
-  background: var(--surface);
+  background: var(--ad-bg);
+  color: var(--ad-text);
   padding: 1.5rem;
   border-radius: 16px;
   box-shadow: var(--shadow);

@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ELIT21</title>
+  <title>{{ site_settings["site_name"] }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
 </head>
-<body>
+<body style="--header-primary: {{ site_settings['header_bg_color'] }}; --header-secondary: {{ site_settings['header_secondary_color'] }}; --bg: {{ site_settings['page_bg_color'] }}; --ad-bg: {{ site_settings['ad_bg_color'] }}; --ad-text: {{ site_settings['ad_text_color'] }}; --site-font: {{ site_settings['site_name_font'] }};">
   <header>
     <nav>
-      <div class="logo">ELIT21</div>
+      <div class="logo" id="site-name-logo">{{ site_settings["site_name"] }}</div>
       <div>
         <a href="{{ url_for('index') }}">Market</a>
         <a href="{{ url_for('cart') }}">Panier ({{ cart_count }})</a>
@@ -35,7 +35,65 @@
   </main>
 
   <footer>
-    <p>ELIT21 &copy; 2024 - Marketplace premium sécurisé.</p>
+    <p><span id="footer-site-name">{{ site_settings["site_name"] }}</span> &copy; 2024 - Marketplace premium sécurisé.</p>
   </footer>
+
+  <script>
+    (function () {
+      const apiUrl = "{{ url_for('api_site_settings') }}";
+      let lastSignature = null;
+
+      function signature(settings) {
+        return JSON.stringify(settings || {});
+      }
+
+      function applySettingsLive(settings) {
+        if (!settings) return;
+        document.title = settings.site_name || document.title;
+        document.body.style.setProperty('--header-primary', settings.header_bg_color || '#0c1f4c');
+        document.body.style.setProperty('--header-secondary', settings.header_secondary_color || '#1f3a7a');
+        document.body.style.setProperty('--bg', settings.page_bg_color || '#f5f7fb');
+        document.body.style.setProperty('--ad-bg', settings.ad_bg_color || '#ffffff');
+        document.body.style.setProperty('--ad-text', settings.ad_text_color || '#0c1f4c');
+        document.body.style.setProperty('--site-font', settings.site_name_font || 'Segoe UI');
+
+        const logo = document.getElementById('site-name-logo');
+        if (logo) logo.textContent = settings.site_name || logo.textContent;
+        const footerName = document.getElementById('footer-site-name');
+        if (footerName) footerName.textContent = settings.site_name || footerName.textContent;
+
+        const badge = document.getElementById('promo-badge-text');
+        if (badge && settings.promo_badge_text) badge.textContent = settings.promo_badge_text;
+        const title = document.getElementById('promo-title-text');
+        if (title && settings.promo_title_text) title.textContent = settings.promo_title_text;
+        const desc = document.getElementById('promo-description-text');
+        if (desc && settings.promo_description_text) desc.textContent = settings.promo_description_text;
+
+        for (let i = 1; i <= 3; i += 1) {
+          const cardTitle = document.getElementById(`promo-card-${i}-title`);
+          const cardValue = document.getElementById(`promo-card-${i}-value`);
+          if (cardTitle && settings[`promo_card_${i}_title`]) cardTitle.textContent = settings[`promo_card_${i}_title`];
+          if (cardValue && settings[`promo_card_${i}_value`]) cardValue.textContent = settings[`promo_card_${i}_value`];
+        }
+      }
+
+      function pollSettings() {
+        fetch(apiUrl, { cache: 'no-store' })
+          .then((response) => response.json())
+          .then((settings) => {
+            const sig = signature(settings);
+            if (sig !== lastSignature) {
+              lastSignature = sig;
+              applySettingsLive(settings);
+            }
+          })
+          .catch(() => {});
+      }
+
+      pollSettings();
+      window.setInterval(pollSettings, 3000);
+    })();
+  </script>
+
 </body>
 </html>

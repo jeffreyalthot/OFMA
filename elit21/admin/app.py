@@ -13,6 +13,8 @@ from tkinter import (
     filedialog,
     messagebox,
     Label,
+    Toplevel,
+    colorchooser,
 )
 
 try:
@@ -21,7 +23,7 @@ except ImportError:  # pragma: no cover - optional dependency
     Image = None
     ImageTk = None
 
-from elit21.db import get_connection, init_db
+from elit21.db import DEFAULT_SITE_SETTINGS, get_connection, get_site_settings, init_db
 
 
 MAX_IMAGES = 8
@@ -56,6 +58,17 @@ CATEGORY_OPTIONS = [
     "Chaussettes",
 ]
 
+SITE_NAME_FONTS = [
+    "Segoe UI",
+    "Inter",
+    "Arial",
+    "Helvetica",
+    "Times New Roman",
+    "Georgia",
+    "Verdana",
+    "Courier New",
+]
+
 COLOR_SWATCHES = {
     "Noir": "#000000",
     "Blanc": "#ffffff",
@@ -85,6 +98,12 @@ class AdminApp:
         self.selected_images: list[tuple[bytes, str]] = []
         self.image_previews: list[ImageTk.PhotoImage] = []
         self.orders_refresh_job: str | None = None
+        self.site_settings_window: Toplevel | None = None
+        self.site_settings_vars: dict[str, StringVar] = {}
+
+        top_bar = ttk.Frame(root, padding=(10, 6))
+        top_bar.pack(fill="x")
+        ttk.Button(top_bar, text="Web Page", command=self.open_site_settings_window).pack(side="left")
 
         notebook = ttk.Notebook(root)
         notebook.pack(fill="both", expand=True)
@@ -109,6 +128,7 @@ class AdminApp:
 
         self.refresh_all()
         self.schedule_orders_refresh()
+        self.open_site_settings_window()
 
     def _build_dashboard(self) -> None:
         self.dashboard_cards = {}
@@ -1132,6 +1152,202 @@ class AdminApp:
         conn.commit()
         conn.close()
         self.refresh_all()
+
+
+    def choose_color(self, key: str, preview: Label) -> None:
+        initial = self.site_settings_vars[key].get().strip() or DEFAULT_SITE_SETTINGS[key]
+        selected = colorchooser.askcolor(color=initial, title="Choisir une couleur")
+        color = selected[1]
+        if not color:
+            return
+        self.site_settings_vars[key].set(color)
+        preview.config(background=color, text=color)
+        self.update_site_preview()
+
+    def open_site_settings_window(self) -> None:
+        if self.site_settings_window and self.site_settings_window.winfo_exists():
+            self.site_settings_window.lift()
+            self.site_settings_window.focus_force()
+            return
+
+        settings = get_site_settings()
+        self.site_settings_window = Toplevel(self.root)
+        self.site_settings_window.title("Web Page - Personnalisation")
+        self.site_settings_window.geometry("980x720")
+
+        container = ttk.Frame(self.site_settings_window, padding=14)
+        container.pack(fill="both", expand=True)
+
+        left = ttk.Labelframe(container, text="Paramètres", padding=12)
+        left.pack(side="left", fill="both", expand=True, padx=(0, 10))
+
+        right = ttk.Labelframe(container, text="Aperçu rapide", padding=12)
+        right.pack(side="left", fill="both", expand=True)
+
+        fields = [
+            ("site_name", "Nom du site"),
+            ("header_bg_color", "Couleur en-tête (principal)"),
+            ("header_secondary_color", "Couleur en-tête (secondaire)"),
+            ("page_bg_color", "Couleur de fond du site"),
+            ("ad_bg_color", "Couleur fond petites annonces"),
+            ("ad_text_color", "Couleur texte petites annonces"),
+            ("promo_badge_text", "Texte badge promo"),
+            ("promo_title_text", "Titre promo"),
+            ("promo_description_text", "Description promo"),
+            ("promo_card_1_title", "Annonce 1 - titre"),
+            ("promo_card_1_value", "Annonce 1 - valeur"),
+            ("promo_card_2_title", "Annonce 2 - titre"),
+            ("promo_card_2_value", "Annonce 2 - valeur"),
+            ("promo_card_3_title", "Annonce 3 - titre"),
+            ("promo_card_3_value", "Annonce 3 - valeur"),
+        ]
+
+        self.site_settings_vars = {
+            key: StringVar(value=settings.get(key, DEFAULT_SITE_SETTINGS[key]))
+            for key in DEFAULT_SITE_SETTINGS
+        }
+
+        row = 0
+        field_rows: dict[str, int] = {}
+        for key, label in fields:
+            field_rows[key] = row
+            ttk.Label(left, text=label).grid(row=row, column=0, sticky="w", pady=3)
+            ttk.Entry(left, textvariable=self.site_settings_vars[key], width=45).grid(
+                row=row,
+                column=1,
+                sticky="ew",
+                padx=(8, 6),
+                pady=3,
+            )
+            row += 1
+
+        ttk.Label(left, text="Police du nom du site").grid(row=row, column=0, sticky="w", pady=3)
+        ttk.Combobox(
+            left,
+            textvariable=self.site_settings_vars["site_name_font"],
+            values=SITE_NAME_FONTS,
+            state="readonly",
+            width=42,
+        ).grid(row=row, column=1, sticky="ew", padx=(8, 6), pady=3)
+        row += 1
+
+        for color_key in (
+            "header_bg_color",
+            "header_secondary_color",
+            "page_bg_color",
+            "ad_bg_color",
+            "ad_text_color",
+        ):
+            color_row = field_rows[color_key]
+            preview = Label(
+                left,
+                text=self.site_settings_vars[color_key].get(),
+                width=16,
+                relief="solid",
+                borderwidth=1,
+                background=self.site_settings_vars[color_key].get(),
+            )
+            preview.grid(row=color_row, column=2, padx=(4, 0), pady=3)
+            ttk.Button(
+                left,
+                text="Choisir",
+                command=lambda k=color_key, p=preview: self.choose_color(k, p),
+            ).grid(row=color_row, column=3, padx=(4, 0), pady=3)
+
+        for variable in self.site_settings_vars.values():
+            variable.trace_add("write", lambda *_args: self.update_site_preview())
+
+        left.columnconfigure(1, weight=1)
+
+        self.preview_canvas = Canvas(right, width=420, height=430, bg="#f5f7fb", highlightthickness=1, highlightbackground="#d1d5db")
+        self.preview_canvas.pack(fill="both", expand=True)
+
+        actions = ttk.Frame(left)
+        actions.grid(row=row + 1, column=0, columnspan=4, sticky="ew", pady=(12, 0))
+        ttk.Button(actions, text="Appliquer et sauvegarder", command=self.save_site_settings).pack(side="left")
+        ttk.Button(actions, text="Réinitialiser", command=self.reset_site_settings_form).pack(side="left", padx=8)
+
+        self.update_site_preview()
+
+    def reset_site_settings_form(self) -> None:
+        for key, default_value in DEFAULT_SITE_SETTINGS.items():
+            self.site_settings_vars[key].set(default_value)
+        self.update_site_preview()
+
+    def update_site_preview(self) -> None:
+        if not hasattr(self, "preview_canvas"):
+            return
+        c = self.preview_canvas
+        c.delete("all")
+        header1 = self.site_settings_vars["header_bg_color"].get().strip() or DEFAULT_SITE_SETTINGS["header_bg_color"]
+        bg = self.site_settings_vars["page_bg_color"].get().strip() or DEFAULT_SITE_SETTINGS["page_bg_color"]
+        ad_bg = self.site_settings_vars["ad_bg_color"].get().strip() or DEFAULT_SITE_SETTINGS["ad_bg_color"]
+        ad_text = self.site_settings_vars["ad_text_color"].get().strip() or DEFAULT_SITE_SETTINGS["ad_text_color"]
+        site_name = self.site_settings_vars["site_name"].get().strip() or DEFAULT_SITE_SETTINGS["site_name"]
+        title = self.site_settings_vars["promo_title_text"].get().strip() or DEFAULT_SITE_SETTINGS["promo_title_text"]
+
+        c.configure(bg=bg)
+        c.create_rectangle(0, 0, 420, 110, fill=header1, width=0)
+        c.create_text(20, 26, text=site_name, anchor="w", fill="#ffffff", font=(self.site_settings_vars["site_name_font"].get() or "Segoe UI", 16, "bold"))
+        c.create_text(20, 62, text=title[:48], anchor="w", fill="#ffffff", font=("Segoe UI", 11, "bold"))
+        for i in range(3):
+            x0 = 20 + (i * 130)
+            c.create_rectangle(x0, 150, x0 + 115, 230, fill=ad_bg, outline="#cbd5e1")
+            card_title = self.site_settings_vars[f"promo_card_{i+1}_title"].get().strip()
+            card_value = self.site_settings_vars[f"promo_card_{i+1}_value"].get().strip()
+            c.create_text(x0 + 8, 175, text=card_title[:16], anchor="w", fill=ad_text, font=("Segoe UI", 9, "bold"))
+            c.create_text(x0 + 8, 206, text=card_value[:16], anchor="w", fill=ad_text, font=("Segoe UI", 10))
+
+    def save_site_settings(self) -> None:
+        values = {key: var.get().strip() for key, var in self.site_settings_vars.items()}
+        for key, default_value in DEFAULT_SITE_SETTINGS.items():
+            if not values.get(key):
+                values[key] = default_value
+
+        conn = get_connection()
+        conn.execute(
+            """
+            UPDATE site_settings SET
+                site_name = ?,
+                site_name_font = ?,
+                header_bg_color = ?,
+                header_secondary_color = ?,
+                page_bg_color = ?,
+                promo_badge_text = ?,
+                promo_title_text = ?,
+                promo_description_text = ?,
+                promo_card_1_title = ?,
+                promo_card_1_value = ?,
+                promo_card_2_title = ?,
+                promo_card_2_value = ?,
+                promo_card_3_title = ?,
+                promo_card_3_value = ?,
+                ad_bg_color = ?,
+                ad_text_color = ?
+            WHERE id = 1
+            """,
+            (
+                values["site_name"],
+                values["site_name_font"],
+                values["header_bg_color"],
+                values["header_secondary_color"],
+                values["page_bg_color"],
+                values["promo_badge_text"],
+                values["promo_title_text"],
+                values["promo_description_text"],
+                values["promo_card_1_title"],
+                values["promo_card_1_value"],
+                values["promo_card_2_title"],
+                values["promo_card_2_value"],
+                values["promo_card_3_title"],
+                values["promo_card_3_value"],
+                values["ad_bg_color"],
+                values["ad_text_color"],
+            ),
+        )
+        conn.commit()
+        conn.close()
+        messagebox.showinfo("Succès", "Les paramètres de la page web ont été sauvegardés.")
 
 
 def main():
