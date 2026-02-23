@@ -3,6 +3,14 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent / "elit21.db"
 
+CURRENCY_OPTIONS = {
+    "CAD": {"name": "Dollar canadien", "symbol": "$ CA"},
+    "USD": {"name": "Dollar américain", "symbol": "$ US"},
+    "EUR": {"name": "Euro", "symbol": "€"},
+    "JPY": {"name": "Yen japonais", "symbol": "¥"},
+    "GBP": {"name": "Livre sterling", "symbol": "£"},
+}
+
 DEFAULT_SITE_SETTINGS = {
     "site_name": "ELIT21",
     "site_name_font": "Segoe UI",
@@ -23,6 +31,7 @@ DEFAULT_SITE_SETTINGS = {
     "promo_card_3_value": "98%",
     "ad_bg_color": "#ffffff",
     "ad_text_color": "#0c1f4c",
+    "currency_code": "CAD",
 }
 
 
