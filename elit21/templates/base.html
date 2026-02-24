@@ -6,7 +6,7 @@
   <title>{{ site_settings["site_name"] }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
 </head>
-<body style="--header-primary: {{ site_settings['header_bg_color'] }}; --header-secondary: {{ site_settings['header_secondary_color'] }}; --bg: {{ site_settings['page_bg_color'] }}; --ad-bg: {{ site_settings['ad_bg_color'] }}; --ad-text: {{ site_settings['ad_text_color'] }}; --site-font: {{ site_settings['site_name_font'] }};">
+<body style="--header-primary: {{ site_settings['header_bg_color'] }}; --header-secondary: {{ site_settings['header_secondary_color'] }}; --bg: {{ site_settings['page_bg_color'] }}; --ad-bg: {{ site_settings['ad_bg_color'] }}; --ad-text: {{ site_settings['ad_text_color'] }}; --site-font: {{ site_settings['site_name_font'] }}; --ad-button: {{ site_settings['ad_button_color'] }};">
   <header>
     <nav>
       <div class="logo" id="site-name-logo">{{ site_settings["site_name"] }}</div>
@@ -60,6 +60,7 @@
         document.body.style.setProperty('--ad-bg', settings.ad_bg_color || '#ffffff');
         document.body.style.setProperty('--ad-text', settings.ad_text_color || '#0c1f4c');
         document.body.style.setProperty('--site-font', settings.site_name_font || 'Segoe UI');
+        document.body.style.setProperty('--ad-button', settings.ad_button_color || '#1f3a7a');
 
         const logo = document.getElementById('site-name-logo');
         if (logo) logo.textContent = settings.site_name || logo.textContent;

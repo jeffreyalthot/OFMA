@@ -1408,6 +1408,7 @@ class AdminApp:
             ("page_bg_color", "Couleur de fond du site"),
             ("ad_bg_color", "Couleur fond petites annonces"),
             ("ad_text_color", "Couleur texte petites annonces"),
+            ("ad_button_color", "Couleur bouton Voir article"),
             ("promo_badge_text", "Texte badge promo"),
             ("promo_title_text", "Titre promo"),
             ("promo_description_text", "Description promo"),
@@ -1454,6 +1455,7 @@ class AdminApp:
             "page_bg_color",
             "ad_bg_color",
             "ad_text_color",
+            "ad_button_color",
         ):
             color_row = field_rows[color_key]
             preview = Label(
@@ -1500,6 +1502,7 @@ class AdminApp:
         bg = self.site_settings_vars["page_bg_color"].get().strip() or DEFAULT_SITE_SETTINGS["page_bg_color"]
         ad_bg = self.site_settings_vars["ad_bg_color"].get().strip() or DEFAULT_SITE_SETTINGS["ad_bg_color"]
         ad_text = self.site_settings_vars["ad_text_color"].get().strip() or DEFAULT_SITE_SETTINGS["ad_text_color"]
+        ad_button = self.site_settings_vars["ad_button_color"].get().strip() or DEFAULT_SITE_SETTINGS["ad_button_color"]
         site_name = self.site_settings_vars["site_name"].get().strip() or DEFAULT_SITE_SETTINGS["site_name"]
         title = self.site_settings_vars["promo_title_text"].get().strip() or DEFAULT_SITE_SETTINGS["promo_title_text"]
 
@@ -1514,6 +1517,8 @@ class AdminApp:
             card_value = self.site_settings_vars[f"promo_card_{i+1}_value"].get().strip()
             c.create_text(x0 + 8, 175, text=card_title[:16], anchor="w", fill=ad_text, font=("Segoe UI", 9, "bold"))
             c.create_text(x0 + 8, 206, text=card_value[:16], anchor="w", fill=ad_text, font=("Segoe UI", 10))
+        c.create_rectangle(140, 280, 280, 314, fill=ad_button, outline="")
+        c.create_text(210, 297, text="Voir article", fill="#ffffff", font=("Segoe UI", 10, "bold"))
 
     def save_site_settings(self) -> None:
         values = {key: var.get().strip() for key, var in self.site_settings_vars.items()}
@@ -1540,7 +1545,8 @@ class AdminApp:
                 promo_card_3_title = ?,
                 promo_card_3_value = ?,
                 ad_bg_color = ?,
-                ad_text_color = ?
+                ad_text_color = ?,
+                ad_button_color = ?
             WHERE id = 1
             """,
             (
@@ -1560,10 +1566,13 @@ class AdminApp:
                 values["promo_card_3_value"],
                 values["ad_bg_color"],
                 values["ad_text_color"],
+                values["ad_button_color"],
             ),
         )
         conn.commit()
         conn.close()
+        self.refresh_all()
+        self.update_site_preview()
         messagebox.showinfo("Succès", "Les paramètres de la page web ont été sauvegardés.")
 
 

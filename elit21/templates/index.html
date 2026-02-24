@@ -35,16 +35,18 @@
   <div class="market-grid">
     {% for product in products %}
       <div class="card">
-        {% if product['first_image_id'] %}
-          <img src="{{ url_for('product_image', product_id=product['id'], image_id=product['first_image_id']) }}" alt="{{ product['name'] }}" />
-        {% else %}
-          <img src="https://via.placeholder.com/400x240?text={{ site_settings['site_name']|urlencode }}" alt="{{ product['name'] }}" />
-        {% endif %}
+        <div class="card-image">
+          {% if product['first_image_id'] %}
+            <img src="{{ url_for('product_image', product_id=product['id'], image_id=product['first_image_id']) }}" alt="{{ product['name'] }}" />
+          {% else %}
+            <img src="https://via.placeholder.com/400x240?text={{ site_settings['site_name']|urlencode }}" alt="{{ product['name'] }}" />
+          {% endif %}
+        </div>
         <div class="card-content">
           <h3>{{ product['name'] }}</h3>
           <p>{{ product['description'][:120] }}{% if product['description']|length > 120 %}...{% endif %}</p>
           <div class="price">{{ format_money(product['price']) }}</div>
-          <a href="{{ url_for('product_detail', product_id=product['id']) }}">{{ tr("view_item") }}</a>
+          <a class="view-item-button" href="{{ url_for('product_detail', product_id=product['id']) }}">{{ tr("view_item") }}</a>
         </div>
       </div>
     {% endfor %}

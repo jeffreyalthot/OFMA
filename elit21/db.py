@@ -32,6 +32,7 @@ DEFAULT_SITE_SETTINGS = {
     "promo_card_3_value": "98%",
     "ad_bg_color": "#ffffff",
     "ad_text_color": "#0c1f4c",
+    "ad_button_color": "#1f3a7a",
     "currency_code": "CAD",
     "shipping_fee": "9.99",
     "language_code": "fr",
@@ -68,7 +69,8 @@ def init_db():
             promo_card_3_title TEXT NOT NULL,
             promo_card_3_value TEXT NOT NULL,
             ad_bg_color TEXT NOT NULL,
-            ad_text_color TEXT NOT NULL
+            ad_text_color TEXT NOT NULL,
+            ad_button_color TEXT NOT NULL
         )
         """
     )
@@ -84,8 +86,8 @@ def init_db():
                 id, site_name, site_name_font, header_bg_color, header_secondary_color,
                 page_bg_color, promo_badge_text, promo_title_text, promo_description_text,
                 promo_card_1_title, promo_card_1_value, promo_card_2_title, promo_card_2_value,
-                promo_card_3_title, promo_card_3_value, ad_bg_color, ad_text_color
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                promo_card_3_title, promo_card_3_value, ad_bg_color, ad_text_color, ad_button_color
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 1,
@@ -105,6 +107,7 @@ def init_db():
                 DEFAULT_SITE_SETTINGS["promo_card_3_value"],
                 DEFAULT_SITE_SETTINGS["ad_bg_color"],
                 DEFAULT_SITE_SETTINGS["ad_text_color"],
+                DEFAULT_SITE_SETTINGS["ad_button_color"],
             ),
         )
 
