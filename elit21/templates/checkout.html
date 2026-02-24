@@ -236,6 +236,7 @@
       const sdkUrl = new URL('https://www.paypal.com/sdk/js');
       sdkUrl.searchParams.set('client-id', '{{ paypal_client_id }}');
       sdkUrl.searchParams.set('components', 'buttons,card-fields');
+      sdkUrl.searchParams.set('disable-funding', 'paylater');
       sdkUrl.searchParams.set('currency', '{{ paypal_currency_code }}');
       sdkUrl.searchParams.set('intent', 'capture');
       if (debugEnabled) {
