@@ -3,6 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="{{ tr('seo_meta_description') }}" />
+  <meta name="keywords" content="{{ tr('seo_meta_keywords') }}" />
+  <meta name="robots" content="index, follow" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="{{ site_settings['site_name'] }}" />
+  <meta property="og:title" content="{{ site_settings['site_name'] }}" />
+  <meta property="og:description" content="{{ tr('seo_meta_description') }}" />
+  <meta property="og:image" content="{{ url_for('static', filename='brand-mark.svg', _external=True) }}" />
+  <meta property="og:url" content="{{ request.url }}" />
+  <link rel="canonical" href="{{ request.base_url }}" />
   <title>{{ site_settings["site_name"] }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
 </head>
