@@ -52,4 +52,21 @@
 {% else %}
   <p>{{ tr("no_items") }}</p>
 {% endif %}
+
+<section class="brand-policy" aria-label="{{ tr('brand_image_title') }}">
+  <div class="brand-policy-image">
+    <img src="{{ url_for('static', filename='brand-mark.svg') }}" alt="{{ tr('brand_image_alt') }}" />
+  </div>
+  <div class="brand-policy-copy">
+    <h3>{{ tr('brand_image_title') }}</h3>
+    <p>{{ tr('brand_image_description') }}</p>
+    <h4>{{ tr('refund_plan_title') }}</h4>
+    <ul>
+      <li>{{ tr('refund_plan_item_1') }}</li>
+      <li>{{ tr('refund_plan_item_2') }}</li>
+      <li>{{ tr('refund_plan_item_3') }}</li>
+      <li>{{ tr('refund_plan_item_4') }}</li>
+    </ul>
+  </div>
+</section>
 {% endblock %}

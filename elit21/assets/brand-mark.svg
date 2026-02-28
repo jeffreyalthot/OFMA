@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480" role="img" aria-labelledby="title desc">
+  <title id="title">ELIT21 Brand Mark</title>
+  <desc id="desc">Abstract premium shield and check icon representing trust and customer protection.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0c1f4c"/>
+      <stop offset="100%" stop-color="#1f3a7a"/>
+    </linearGradient>
+    <linearGradient id="shield" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f9c74f"/>
+      <stop offset="100%" stop-color="#f6ad2f"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="640" height="480" fill="url(#bg)" rx="24"/>
+  <circle cx="490" cy="120" r="88" fill="rgba(255,255,255,0.08)"/>
+  <circle cx="150" cy="360" r="120" fill="rgba(255,255,255,0.06)"/>
+
+  <path d="M320 105 450 160v92c0 95-57 153-130 188-73-35-130-93-130-188v-92l130-55z" fill="url(#shield)"/>
+  <path d="m265 249 42 43 78-86" fill="none" stroke="#0c1f4c" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <text x="320" y="420" text-anchor="middle" fill="#ffffff" font-size="44" font-family="Segoe UI, Arial, sans-serif" font-weight="700" letter-spacing="4">
+    ELIT21 TRUST
+  </text>
+</svg>

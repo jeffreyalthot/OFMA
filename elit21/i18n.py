@@ -83,6 +83,16 @@ COMMON_EXTRA = {
     "order_not_confirmed": "Order not confirmed.",
     "payment_prepare_error": "Error while preparing payment.",
     "creating_paypal_order": "Creating PayPal order...",
+    "seo_meta_description": "ELIT21: secure marketplace with a clear refund and compensation policy in case of defect or dissatisfaction.",
+    "seo_meta_keywords": "ELIT21, secure marketplace, refund policy, customer compensation, online store",
+    "brand_image_title": "Our brand image: trust first",
+    "brand_image_alt": "ELIT21 trust badge and customer protection visual",
+    "brand_image_description": "Our visual identity highlights reliable service, premium quality, and transparent support for every customer.",
+    "refund_plan_title": "Refund & compensation policy",
+    "refund_plan_item_1": "Defective item on arrival: full refund or free replacement within 7 days after verification.",
+    "refund_plan_item_2": "Product not as described or strong dissatisfaction: return accepted within 14 days, with exchange or refund.",
+    "refund_plan_item_3": "Late delivery caused by us: shipping fees refunded and a compensation credit offered.",
+    "refund_plan_item_4": "Every request is handled in under 48 business hours with status updates until resolution.",
 }
 
 TRANSLATIONS = {

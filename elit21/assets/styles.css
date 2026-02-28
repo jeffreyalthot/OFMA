@@ -418,6 +418,46 @@ footer {
   font-weight: 700;
 }
 
+.brand-policy {
+  margin-top: 3rem;
+  padding: 1.5rem;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  display: grid;
+  grid-template-columns: minmax(180px, 280px) 1fr;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.brand-policy-image {
+  background: linear-gradient(140deg, rgba(12, 31, 76, 0.08), rgba(31, 58, 122, 0.14));
+  border-radius: 16px;
+  padding: 1rem;
+}
+
+.brand-policy-image img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.brand-policy-copy h3,
+.brand-policy-copy h4 {
+  margin-bottom: 0.6rem;
+}
+
+.brand-policy-copy p {
+  margin-bottom: 1rem;
+  color: var(--muted);
+}
+
+.brand-policy-copy ul {
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
 @media (max-width: 768px) {
   header {
     padding: 2rem 5vw;
@@ -433,6 +473,10 @@ footer {
   }
 
   .cart-item {
+    grid-template-columns: 1fr;
+  }
+
+  .brand-policy {
     grid-template-columns: 1fr;
   }
 }
