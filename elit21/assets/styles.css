@@ -499,3 +499,40 @@ footer {
     grid-template-columns: 1fr;
   }
 }
+
+.info-page {
+  background: var(--surface);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  padding: 2rem;
+}
+
+.policy-layout {
+  display: grid;
+  grid-template-columns: minmax(200px, 320px) 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+.info-content h1,
+.info-content h2 {
+  margin-bottom: 0.75rem;
+}
+
+.info-content p {
+  margin-bottom: 1rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.info-content ul {
+  margin: 0 0 1.25rem 1.2rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .policy-layout {
+    grid-template-columns: 1fr;
+  }
+}
