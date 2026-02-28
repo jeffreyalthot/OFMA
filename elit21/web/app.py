@@ -462,6 +462,14 @@ def create_app():
             site_settings=get_site_settings_payload(),
         )
 
+    @app.route("/policy")
+    def policy():
+        return render_template("policy.html")
+
+    @app.route("/seo")
+    def seo_page():
+        return render_template("seo.html")
+
     @app.route("/product/<int:product_id>")
     def product_detail(product_id: int):
         conn = get_connection()

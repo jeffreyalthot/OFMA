@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="info-page">
+  <div class="info-content">
+    <h1>{{ tr('seo_page_title') }}</h1>
+    <p>{{ tr('seo_page_intro') }}</p>
+
+    <h2>{{ tr('seo_page_meta_title') }}</h2>
+    <ul>
+      <li>{{ tr('seo_page_meta_item_1') }}</li>
+      <li>{{ tr('seo_page_meta_item_2') }}</li>
+      <li>{{ tr('seo_page_meta_item_3') }}</li>
+    </ul>
+
+    <h2>{{ tr('seo_page_best_practices_title') }}</h2>
+    <ul>
+      <li>{{ tr('seo_page_best_item_1') }}</li>
+      <li>{{ tr('seo_page_best_item_2') }}</li>
+      <li>{{ tr('seo_page_best_item_3') }}</li>
+    </ul>
+  </div>
+</section>
+{% endblock %}

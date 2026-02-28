@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="info-page policy-layout" aria-label="{{ tr('policy_page_title') }}">
+  <div class="brand-policy-image">
+    <img src="{{ url_for('static', filename='brand-mark.svg') }}" alt="{{ tr('policy_brand_alt') }}" />
+  </div>
+  <div class="info-content">
+    <h1>{{ tr('policy_page_title') }}</h1>
+    <p>{{ tr('policy_brand_description') }}</p>
+    <h2>{{ tr('policy_refund_title') }}</h2>
+    <ul>
+      <li>{{ tr('policy_refund_item_1') }}</li>
+      <li>{{ tr('policy_refund_item_2') }}</li>
+      <li>{{ tr('policy_refund_item_3') }}</li>
+      <li>{{ tr('policy_refund_item_4') }}</li>
+    </ul>
+  </div>
+</section>
+{% endblock %}
