@@ -30,6 +30,28 @@
 {% endblock %}
 
 {% block content %}
+<section class="experience-teaser">
+  <div>
+    <h2>{{ tr("experience_title") }}</h2>
+    <p>{{ tr("experience_intro") }}</p>
+    <a class="view-item-button" href="{{ url_for('experience') }}">{{ tr("nav_experience") }}</a>
+  </div>
+  <div class="teaser-metrics">
+    <article>
+      <h4>{{ tr("experience_total_products") }}</h4>
+      <strong>{{ snapshot.total_products }}</strong>
+    </article>
+    <article>
+      <h4>{{ tr("experience_total_categories") }}</h4>
+      <strong>{{ snapshot.total_categories }}</strong>
+    </article>
+    <article>
+      <h4>{{ tr("experience_avg_price") }}</h4>
+      <strong>{{ format_money(snapshot.avg_price) }}</strong>
+    </article>
+  </div>
+</section>
+
 <h2 id="market" class="section-title">{{ tr("market_title") }} {{ site_settings["site_name"] }}</h2>
 {% if products %}
   <div class="market-grid">

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="experience-header">
+  <h1>{{ tr("experience_title") }}</h1>
+  <p>{{ tr("experience_intro") }}</p>
+</section>
+
+{% if snapshot.total_products == 0 %}
+  <div class="empty-state">{{ tr("experience_empty") }}</div>
+{% else %}
+<section class="experience-grid">
+  <article class="experience-card">
+    <h3>{{ tr("experience_live_metrics") }}</h3>
+    <div class="metrics-grid">
+      <div>
+        <span>{{ tr("experience_total_products") }}</span>
+        <strong>{{ snapshot.total_products }}</strong>
+      </div>
+      <div>
+        <span>{{ tr("experience_total_categories") }}</span>
+        <strong>{{ snapshot.total_categories }}</strong>
+      </div>
+      <div>
+        <span>{{ tr("experience_avg_price") }}</span>
+        <strong>{{ format_money(snapshot.avg_price) }}</strong>
+      </div>
+      <div>
+        <span>{{ tr("experience_catalog_health") }}</span>
+        <strong>{{ snapshot.catalog_health }}%</strong>
+      </div>
+    </div>
+  </article>
+
+  <article class="experience-card">
+    <h3>{{ tr("experience_top_categories") }}</h3>
+    <ul class="category-list">
+      {% for category in snapshot.top_categories %}
+        <li><span>{{ category.name }}</span><b>{{ category.count }}</b></li>
+      {% endfor %}
+    </ul>
+  </article>
+
+  <article class="experience-card">
+    <h3>{{ tr("experience_price_architecture") }}</h3>
+    <div class="tier-stack">
+      <div><span>Entry (&lt; 50)</span><b>{{ snapshot.price_tiers.entry }}</b></div>
+      <div><span>Core (50-199)</span><b>{{ snapshot.price_tiers.core }}</b></div>
+      <div><span>Premium (200+)</span><b>{{ snapshot.price_tiers.premium }}</b></div>
+    </div>
+  </article>
+
+  <article class="experience-card recent-products">
+    <h3>{{ tr("experience_recent_products") }}</h3>
+    <div class="recent-grid">
+      {% for product in snapshot.recent_products %}
+        <div class="recent-item">
+          {% if product.first_image_id %}
+            <img src="{{ url_for('product_image', product_id=product.id, image_id=product.first_image_id) }}" alt="{{ product.name }}" />
+          {% endif %}
+          <h4>{{ product.name }}</h4>
+          <p>{{ product.description[:90] }}{% if product.description|length > 90 %}...{% endif %}</p>
+          <div class="recent-foot">
+            <strong>{{ format_money(product.price) }}</strong>
+            <a href="{{ url_for('product_detail', product_id=product.id) }}">{{ tr("experience_open_product") }}</a>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </article>
+</section>
+{% endif %}
+{% endblock %}
