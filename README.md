@@ -59,6 +59,14 @@ Notes:
 - Le backend vérifie à la capture: statut `COMPLETED`, `reference_id` de la commande, devise configurée dans l'administration (ex: `CAD`, `USD`, `EUR`, `CNY`) et montant attendu.
 - Si `PAYPAL_ENV` est mauvais mais les clés sont valides, le backend tente automatiquement l'autre environnement (désactivable via `PAYPAL_ENV_AUTO_FALLBACK=0`).
 
+## Tests
+
+```bash
+pytest -q
+```
+
+Le fichier `pytest.ini` configure automatiquement le `PYTHONPATH` pour exécuter les tests depuis la racine du dépôt.
+
 ## Structure
 
 ```
