@@ -2,6 +2,7 @@ import sqlite3
 from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent / "elit21.db"
+UPLOADS_PATH = Path(__file__).resolve().parent / "uploads"
 
 CURRENCY_OPTIONS = {
     "CAD": {"name": "Dollar canadien", "symbol": "$ CA"},
@@ -163,13 +164,20 @@ def init_db():
         CREATE TABLE IF NOT EXISTS product_images (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             product_id INTEGER NOT NULL,
-            image_blob BLOB NOT NULL,
-            mime_type TEXT NOT NULL,
+            image_blob BLOB,
+            image_path TEXT,
+            mime_type TEXT,
             position INTEGER NOT NULL,
             FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE
         )
         """
     )
+    cursor.execute("PRAGMA table_info(product_images)")
+    product_image_columns = {row[1] for row in cursor.fetchall()}
+    if "image_path" not in product_image_columns:
+        cursor.execute("ALTER TABLE product_images ADD COLUMN image_path TEXT")
+    if "mime_type" not in product_image_columns:
+        cursor.execute("ALTER TABLE product_images ADD COLUMN mime_type TEXT")
 
     cursor.execute(
         """
@@ -240,6 +248,23 @@ def init_db():
         """
     )
 
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS payment_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER,
+            event TEXT NOT NULL,
+            request_payload TEXT,
+            response_payload TEXT,
+            status TEXT NOT NULL,
+            error_message TEXT,
+            retries INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE SET NULL
+        )
+        """
+    )
+
     cursor.execute("PRAGMA table_info(order_items)")
     order_item_columns = {row[1] for row in cursor.fetchall()}
     for column_name in ("color", "size"):
@@ -248,6 +273,7 @@ def init_db():
 
     conn.commit()
     conn.close()
+    UPLOADS_PATH.mkdir(parents=True, exist_ok=True)
 
 
 def get_site_settings() -> dict[str, str]:

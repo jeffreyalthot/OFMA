@@ -8,11 +8,13 @@ Système complet ELIT21 combinant :
 ## Lancement rapide
 
 ```bash
-python run.py
+python run_web.py
+python run_admin.py
 ```
 
 - Le site web est disponible sur `http://localhost:5000`.
-- L'interface Tkinter s'ouvre pour gérer l'inventaire et les commandes.
+- L'interface Tkinter s'ouvre avec `python run_admin.py` pour gérer l'inventaire et les commandes.
+- Option compatibilité: `python run.py both` (démarre les deux).
 
 ## Variables d'environnement
 
@@ -25,7 +27,7 @@ python run.py
 - `SHIPPING_FEE` : frais de livraison fixes
 - `ELIT21_SECRET` : secret de session Flask
 
-Exemple de fichier `.env` :
+Copie le fichier exemple et adapte les valeurs :
 
 ```env
 APP_NAME=AI_market
@@ -35,6 +37,10 @@ PAYPAL_SECRET_KEY_1=your-paypal-client-secret
 PAYPAL_ENV=sandbox
 PAYPAL_DEBUG=1
 SHIPPING_FEE=9.99
+```
+
+```bash
+cp .env.example .env
 ```
 
 
@@ -57,6 +63,8 @@ Notes:
 elit21/
   admin/   # Interface Tkinter
   web/     # Application Flask
+  services/ # Services métier (média/paiement)
+  uploads/ # Images produits sur disque
   assets/  # CSS
   templates/ # HTML
 ```
