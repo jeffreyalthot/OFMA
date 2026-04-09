@@ -514,6 +514,59 @@ def create_app():
         conn.close()
         return products
 
+    def build_experience_snapshot() -> dict[str, object]:
+        products = fetch_active_products()
+        total_products = len(products)
+        categories: dict[str, int] = {}
+        price_tiers = {"entry": 0, "core": 0, "premium": 0}
+        avg_price = Decimal("0")
+
+        if total_products:
+            avg_price = sum(Decimal(str(product["price"])) for product in products) / Decimal(total_products)
+
+        for product in products:
+            category = (product["category"] or "Unclassified").strip() or "Unclassified"
+            categories[category] = categories.get(category, 0) + 1
+            price = float(product["price"])
+            if price < 50:
+                price_tiers["entry"] += 1
+            elif price < 200:
+                price_tiers["core"] += 1
+            else:
+                price_tiers["premium"] += 1
+
+        recent_products = [
+            {
+                "id": product["id"],
+                "name": product["name"],
+                "description": product["description"],
+                "price": float(product["price"]),
+                "first_image_id": product["first_image_id"],
+            }
+            for product in products[:6]
+        ]
+
+        catalog_health = 0
+        if total_products:
+            weighted_diversity = min(len(categories) * 15, 60)
+            weighted_premium_mix = min(price_tiers["premium"] * 8, 20)
+            weighted_core_mix = min(price_tiers["core"] * 3, 20)
+            catalog_health = min(weighted_diversity + weighted_premium_mix + weighted_core_mix, 100)
+
+        return {
+            "total_products": total_products,
+            "total_categories": len(categories),
+            "avg_price": float(avg_price.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
+            "catalog_health": catalog_health,
+            "top_categories": sorted(
+                [{"name": name, "count": count} for name, count in categories.items()],
+                key=lambda item: item["count"],
+                reverse=True,
+            )[:5],
+            "price_tiers": price_tiers,
+            "recent_products": recent_products,
+        }
+
     @app.context_processor
     def inject_cart_metrics():
         settings = get_site_settings_payload()
@@ -607,12 +660,18 @@ def create_app():
         ]
         return jsonify(payload)
 
+    @app.route("/api/experience")
+    def api_experience():
+        return jsonify(build_experience_snapshot())
+
     @app.route("/")
     def index():
         products = fetch_active_products()
+        snapshot = build_experience_snapshot()
         return render_template(
             "index.html",
             products=products,
+            snapshot=snapshot,
             paypal_client_id=get_paypal_settings()["client_id"],
             paypal_env=get_paypal_settings()["env"],
             site_settings=get_site_settings_payload(),
@@ -625,6 +684,11 @@ def create_app():
     @app.route("/seo")
     def seo_page():
         return render_template("seo.html")
+
+    @app.route("/experience")
+    def experience():
+        snapshot = build_experience_snapshot()
+        return render_template("experience.html", snapshot=snapshot)
 
     @app.route("/product/<int:product_id>")
     def product_detail(product_id: int):
