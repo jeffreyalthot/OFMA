@@ -26,6 +26,7 @@ except ImportError:  # pragma: no cover - optional dependency
 
 from elit21.db import CURRENCY_OPTIONS, DEFAULT_SITE_SETTINGS, get_connection, get_site_settings, init_db
 from elit21.i18n import SUPPORTED_LANGUAGES, admin_tr, normalize_language
+from elit21.services.media_service import resolve_image_path, save_product_image
 
 
 MAX_IMAGES = 8
@@ -96,7 +97,7 @@ class AdminApp:
 
         init_db()
 
-        self.selected_images: list[tuple[bytes, str]] = []
+        self.selected_images: list[tuple[bytes, str, str | None]] = []
         self.image_previews: list[ImageTk.PhotoImage] = []
         self.orders_refresh_job: str | None = None
         self.site_settings_window: Toplevel | None = None
@@ -521,7 +522,7 @@ class AdminApp:
                 mime_type = "image/png"
             elif path.lower().endswith(".webp"):
                 mime_type = "image/webp"
-            self.selected_images.append((data, mime_type))
+            self.selected_images.append((data, mime_type, path))
 
         self.images_label.config(text=f"{len(self.selected_images)} image(s) sélectionnée(s)")
 
@@ -625,10 +626,20 @@ class AdminApp:
 
         if self.selected_images:
             cursor.execute("DELETE FROM product_images WHERE product_id = ?", (product_id,))
-            for idx, (data, mime_type) in enumerate(self.selected_images):
+            for idx, (data, mime_type, original_path) in enumerate(self.selected_images):
+                image_path = save_product_image(
+                    product_id=product_id,
+                    index=idx,
+                    content=data,
+                    mime_type=mime_type,
+                    original_path=original_path,
+                )
                 cursor.execute(
-                    "INSERT INTO product_images (product_id, image_blob, mime_type, position) VALUES (?, ?, ?, ?)",
-                    (product_id, data, mime_type, idx),
+                    """
+                    INSERT INTO product_images (product_id, image_blob, image_path, mime_type, position)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (product_id, None, image_path, mime_type, idx),
                 )
 
         conn.commit()
@@ -907,7 +918,13 @@ class AdminApp:
         self.load_product_for_edit(product_id)
         conn = get_connection()
         image = conn.execute(
-            "SELECT image_blob, mime_type FROM product_images WHERE product_id = ? ORDER BY position LIMIT 1",
+            """
+            SELECT image_blob, image_path, mime_type
+            FROM product_images
+            WHERE product_id = ?
+            ORDER BY position
+            LIMIT 1
+            """,
             (product_id,),
         ).fetchone()
         conn.close()
@@ -923,6 +940,14 @@ class AdminApp:
             return
 
         data = image["image_blob"]
+        if data is None and image["image_path"]:
+            path = resolve_image_path(image["image_path"])
+            if path.exists():
+                data = path.read_bytes()
+        if data is None:
+            self.preview_label.config(text="Image introuvable", image="")
+            self.preview_label.image = None
+            return
         img = Image.open(io.BytesIO(data))
         img.thumbnail((220, 220))
         photo = ImageTk.PhotoImage(img)

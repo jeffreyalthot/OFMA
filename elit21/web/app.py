@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
 import json
 import logging
 import os
@@ -18,12 +19,14 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     session,
     url_for,
 )
 
 from elit21.db import CURRENCY_OPTIONS, get_connection, get_site_settings, init_db
 from elit21.i18n import normalize_language, tr
+from elit21.services.media_service import resolve_image_path
 
 
 def load_env_file() -> None:
@@ -126,6 +129,37 @@ def create_app():
 
     def cart_count() -> int:
         return sum(get_cart().values())
+
+    def log_payment_event(
+        *,
+        event: str,
+        status: str,
+        order_id: int | None = None,
+        request_payload: dict | None = None,
+        response_payload: dict | None = None,
+        error_message: str | None = None,
+        retries: int = 0,
+    ) -> None:
+        conn = get_connection()
+        conn.execute(
+            """
+            INSERT INTO payment_logs (
+                order_id, event, request_payload, response_payload, status, error_message, retries, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                order_id,
+                event,
+                json.dumps(request_payload or {}, ensure_ascii=False),
+                json.dumps(response_payload or {}, ensure_ascii=False),
+                status,
+                error_message,
+                retries,
+                datetime.utcnow().isoformat(),
+            ),
+        )
+        conn.commit()
+        conn.close()
 
     def ensure_paypal_configured() -> tuple[bool, str]:
         paypal_settings = get_paypal_settings()
@@ -596,13 +630,19 @@ def create_app():
     def product_image(product_id: int, image_id: int):
         conn = get_connection()
         image = conn.execute(
-            "SELECT image_blob, mime_type FROM product_images WHERE id = ? AND product_id = ?",
+            "SELECT image_blob, image_path, mime_type FROM product_images WHERE id = ? AND product_id = ?",
             (image_id, product_id),
         ).fetchone()
         conn.close()
         if not image:
             return "", 404
-        return (image["image_blob"], 200, {"Content-Type": image["mime_type"]})
+        if image["image_path"]:
+            path = resolve_image_path(image["image_path"])
+            if path.exists():
+                return send_file(path, mimetype=image["mime_type"] or "image/jpeg")
+        if image["image_blob"] is not None:
+            return send_file(io.BytesIO(image["image_blob"]), mimetype=image["mime_type"] or "image/jpeg")
+        return "", 404
 
     @app.route("/register", methods=["GET", "POST"])
     def register():
@@ -837,6 +877,13 @@ def create_app():
         except RuntimeError as exc:
             conn.rollback()
             conn.close()
+            log_payment_event(
+                event="create_paypal_order",
+                status="error",
+                order_id=order_id,
+                request_payload={"currency_code": currency_code, "total": money_as_text(total_money)},
+                error_message=str(exc),
+            )
             app.logger.exception(
                 "[paypal-debug] paypal order creation failed local_order_id=%s",
                 order_id,
@@ -846,6 +893,13 @@ def create_app():
         if not paypal_order_id:
             conn.rollback()
             conn.close()
+            log_payment_event(
+                event="create_paypal_order",
+                status="error",
+                order_id=order_id,
+                response_payload=paypal_order,
+                error_message="missing_paypal_order_id",
+            )
             app.logger.error(
                 "[paypal-debug] paypal order creation invalid response local_order_id=%s payload=%s",
                 order_id,
@@ -858,6 +912,12 @@ def create_app():
         )
         conn.commit()
         conn.close()
+        log_payment_event(
+            event="create_paypal_order",
+            status="success",
+            order_id=order_id,
+            response_payload={"paypal_order_id": paypal_order_id},
+        )
         approval_url = None
         for link in paypal_order.get("links") or []:
             if link.get("rel") == "approve":
@@ -920,6 +980,16 @@ def create_app():
                 order["id"],
             )
             return {"error": "Accès non autorisé à cette commande."}, 403
+        if str(order["payment_status"]).startswith("paid:"):
+            conn.close()
+            app.logger.info(
+                "[paypal-debug] capture_order idempotent return local_order_id=%s",
+                order["id"],
+            )
+            return {
+                "ok": True,
+                "redirect_url": url_for("checkout_success", order_id=order["id"]),
+            }, 200
         if f"paypal_order:{paypal_order_id}" != order["payment_status"]:
             conn.close()
             app.logger.warning(
@@ -937,6 +1007,13 @@ def create_app():
             )
         except RuntimeError as exc:
             conn.close()
+            log_payment_event(
+                event="capture_paypal_order",
+                status="error",
+                order_id=local_order_id,
+                request_payload={"paypal_order_id": paypal_order_id},
+                error_message=str(exc),
+            )
             app.logger.exception(
                 "[paypal-debug] paypal capture failed local_order_id=%s paypal_order_id=%s",
                 local_order_id,
@@ -1054,6 +1131,13 @@ def create_app():
         )
         conn.commit()
         conn.close()
+        log_payment_event(
+            event="capture_paypal_order",
+            status="success",
+            order_id=local_order_id,
+            request_payload={"paypal_order_id": paypal_order_id},
+            response_payload={"capture_id": capture_id, "status": status},
+        )
         app.logger.info(
             "[paypal-debug] capture_order completed local_order_id=%s paypal_order_id=%s capture_id=%s",
             local_order_id,
