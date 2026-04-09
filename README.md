@@ -80,3 +80,11 @@ elit21/
 ```
 
 Aucun article n'est créé par défaut : la vitrine démarre vierge et se remplit via l'interface Tkinter.
+
+## API JSON (phase 2)
+
+Le backend expose aussi des endpoints JSON pour préparer une intégration mobile/front externe :
+
+- `GET /api/site-settings` : configuration publique du site (branding, devise, langue, etc.).
+- `GET /api/products?category=<categorie>&limit=<n>` : catalogue des produits actifs (max `100`).
+- `GET /api/products/<id>` : détail d'un produit actif avec inventaire variantes (couleur/taille) et images.
