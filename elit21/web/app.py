@@ -425,11 +425,23 @@ def create_app():
         amount = Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         return f"{get_currency_payload()['label']} {amount:.2f}"
 
-    def load_cart_items():
+    def load_cart_items() -> tuple[list[dict], float]:
         cart = get_cart()
         if not cart:
             return [], 0.0
-        product_ids = list({parse_cart_key(key)[0] for key in cart.keys()})
+
+        valid_entries: list[tuple[str, int, str, str, int]] = []
+        for key, quantity in cart.items():
+            try:
+                product_id, color, size = parse_cart_key(key)
+            except (TypeError, ValueError):
+                continue
+            valid_entries.append((key, product_id, color, size, quantity))
+
+        if not valid_entries:
+            return [], 0.0
+
+        product_ids = list({entry[1] for entry in valid_entries})
         placeholders = ",".join("?" for _ in product_ids)
         conn = get_connection()
         products = conn.execute(
@@ -440,8 +452,7 @@ def create_app():
         items = []
         subtotal = 0.0
         products_map = {str(product["id"]): product for product in products}
-        for cart_key, quantity in cart.items():
-            product_id, color, size = parse_cart_key(cart_key)
+        for cart_key, product_id, color, size, quantity in valid_entries:
             product = products_map.get(str(product_id))
             if not product:
                 continue
@@ -458,6 +469,50 @@ def create_app():
                 }
             )
         return items, subtotal
+
+    def serialize_product(product, first_image_id: int | None = None) -> dict:
+        image_id = first_image_id if first_image_id is not None else product["first_image_id"]
+        return {
+            "id": product["id"],
+            "name": product["name"],
+            "description": product["description"],
+            "price": float(product["price"]),
+            "status": product["status"],
+            "stock": int(product["stock"]),
+            "color": product["color"],
+            "size": product["size"],
+            "category": product["category"],
+            "created_at": product["created_at"],
+            "first_image_id": image_id,
+            "image_url": (
+                url_for("product_image", product_id=product["id"], image_id=image_id)
+                if image_id
+                else None
+            ),
+        }
+
+    def fetch_active_products(*, category: str | None = None, limit: int | None = None):
+        conn = get_connection()
+        query = """
+            SELECT p.*, (
+                SELECT id FROM product_images
+                WHERE product_id = p.id
+                ORDER BY position LIMIT 1
+            ) AS first_image_id
+            FROM products p
+            WHERE p.status = ?
+        """
+        parameters: list[object] = ["active"]
+        if category:
+            query += " AND p.category = ?"
+            parameters.append(category)
+        query += " ORDER BY p.created_at DESC"
+        if limit is not None:
+            query += " LIMIT ?"
+            parameters.append(limit)
+        products = conn.execute(query, tuple(parameters)).fetchall()
+        conn.close()
+        return products
 
     @app.context_processor
     def inject_cart_metrics():
@@ -486,10 +541,28 @@ def create_app():
     def api_site_settings():
         return jsonify(get_site_settings_payload())
 
-    @app.route("/")
-    def index():
+    @app.route("/api/products")
+    def api_products():
+        category = request.args.get("category", "").strip() or None
+        limit_raw = request.args.get("limit", "").strip()
+        limit: int | None = None
+        if limit_raw:
+            if not limit_raw.isdigit():
+                return jsonify({"error": "Le paramètre limit doit être un entier positif."}), 400
+            limit = max(1, min(int(limit_raw), 100))
+
+        products = fetch_active_products(category=category, limit=limit)
+        return jsonify(
+            {
+                "count": len(products),
+                "products": [serialize_product(product) for product in products],
+            }
+        )
+
+    @app.route("/api/products/<int:product_id>")
+    def api_product_detail(product_id: int):
         conn = get_connection()
-        products = conn.execute(
+        product = conn.execute(
             """
             SELECT p.*, (
                 SELECT id FROM product_images
@@ -497,12 +570,46 @@ def create_app():
                 ORDER BY position LIMIT 1
             ) AS first_image_id
             FROM products p
-            WHERE p.status = ?
-            ORDER BY p.created_at DESC
+            WHERE p.id = ? AND p.status = ?
             """,
-            ("active",),
+            (product_id, "active"),
+        ).fetchone()
+        if not product:
+            conn.close()
+            return jsonify({"error": "Produit introuvable."}), 404
+        images = conn.execute(
+            "SELECT id, mime_type FROM product_images WHERE product_id = ? ORDER BY position",
+            (product_id,),
+        ).fetchall()
+        inventory = conn.execute(
+            """
+            SELECT color, size, quantity
+            FROM product_inventory
+            WHERE product_id = ?
+            ORDER BY color, size
+            """,
+            (product_id,),
         ).fetchall()
         conn.close()
+
+        payload = serialize_product(product)
+        payload["images"] = [
+            {
+                "id": image["id"],
+                "mime_type": image["mime_type"],
+                "url": url_for("product_image", product_id=product_id, image_id=image["id"]),
+            }
+            for image in images
+        ]
+        payload["inventory"] = [
+            {"color": row["color"], "size": row["size"], "quantity": int(row["quantity"])}
+            for row in inventory
+        ]
+        return jsonify(payload)
+
+    @app.route("/")
+    def index():
+        products = fetch_active_products()
         return render_template(
             "index.html",
             products=products,
