@@ -11,6 +11,7 @@ import urllib.request
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime
 from functools import wraps
+from pathlib import Path
 
 from flask import (
     Flask,
@@ -23,6 +24,7 @@ from flask import (
     session,
     url_for,
 )
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from elit21.db import CURRENCY_OPTIONS, get_connection, get_site_settings, init_db
 from elit21.i18n import normalize_language, tr
@@ -30,7 +32,7 @@ from elit21.services.media_service import resolve_image_path
 
 
 def load_env_file() -> None:
-    env_path = os.path.join(os.getcwd(), ".env")
+    env_path = Path(__file__).resolve().parents[2] / ".env"
     if not os.path.exists(env_path):
         return
     with open(env_path, "r", encoding="utf-8") as env_file:
@@ -47,6 +49,19 @@ def load_env_file() -> None:
 
 
 load_env_file()
+
+
+def hash_password(password: str) -> str:
+    return generate_password_hash(password)
+
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    if not stored_hash:
+        return False
+    if stored_hash.startswith("pbkdf2:") or stored_hash.startswith("scrypt:"):
+        return check_password_hash(stored_hash, password)
+    legacy_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
+    return legacy_hash == stored_hash
 
 
 def paypal_debug_enabled() -> bool:
@@ -653,7 +668,7 @@ def create_app():
             if not email or not full_name or not password:
                 flash(t("all_fields_required"))
                 return redirect(url_for("register"))
-            password_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
+            password_hash = hash_password(password)
             conn = get_connection()
             try:
                 conn.execute(
@@ -675,14 +690,13 @@ def create_app():
         if request.method == "POST":
             email = request.form.get("email", "").strip().lower()
             password = request.form.get("password", "")
-            password_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
             conn = get_connection()
             user = conn.execute(
-                "SELECT * FROM users WHERE email = ? AND password_hash = ?",
-                (email, password_hash),
+                "SELECT * FROM users WHERE email = ?",
+                (email,),
             ).fetchone()
             conn.close()
-            if not user:
+            if not user or not verify_password(password, str(user["password_hash"])):
                 flash(t("invalid_credentials"))
                 return redirect(url_for("login"))
             session["user_id"] = user["id"]

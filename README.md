@@ -43,6 +43,8 @@ SHIPPING_FEE=9.99
 cp .env.example .env
 ```
 
+⚠️ Ne versionnez jamais le fichier `.env` (seul `.env.example` doit rester dans Git).
+
 
 ### Configuration PayPal (sans webhooks)
 
