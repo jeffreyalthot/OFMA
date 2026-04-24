@@ -58,6 +58,14 @@ for page_key in PAGE_CUSTOMIZATION_KEYS:
     DEFAULT_SITE_SETTINGS[f"{page_key}_body_text"] = ""
     DEFAULT_SITE_SETTINGS[f"{page_key}_accent_color"] = "#1f3a7a"
     DEFAULT_SITE_SETTINGS[f"{page_key}_text_align"] = "left"
+    DEFAULT_SITE_SETTINGS[f"{page_key}_section_title_text"] = ""
+    DEFAULT_SITE_SETTINGS[f"{page_key}_section_subtitle_text"] = ""
+    DEFAULT_SITE_SETTINGS[f"{page_key}_section_body_text"] = ""
+    DEFAULT_SITE_SETTINGS[f"{page_key}_section_bg_color"] = "#ffffff"
+    DEFAULT_SITE_SETTINGS[f"{page_key}_section_text_color"] = "#0c1f4c"
+    DEFAULT_SITE_SETTINGS[f"{page_key}_section_button_text"] = "Action"
+    DEFAULT_SITE_SETTINGS[f"{page_key}_section_button_bg_color"] = "#1f3a7a"
+    DEFAULT_SITE_SETTINGS[f"{page_key}_section_button_text_color"] = "#ffffff"
 
 
 def get_connection():

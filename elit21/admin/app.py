@@ -95,6 +95,19 @@ COLOR_SWATCHES = {
     "Turquoise": "#1abc9c",
 }
 
+PAGE_DESIGN_HINTS = {
+    "cart": "Panier avec liste d'articles + résumé de facture.",
+    "checkout": "Formulaire livraison + modules paiement + facture.",
+    "checkout_success": "Confirmation paiement avec récapitulatif.",
+    "experience": "Tableau d'analyse avec cartes de métriques.",
+    "index": "Hero marketing + annonces + grille produits.",
+    "login": "Bloc d'authentification compact.",
+    "policy": "Page info avec image de marque + sections liste.",
+    "product": "Fiche produit + options + galerie image.",
+    "register": "Bloc d'inscription compact.",
+    "seo": "Page information SEO structurée.",
+}
+
 
 class AdminApp:
     def __init__(self, root: Tk) -> None:
@@ -1455,12 +1468,6 @@ class AdminApp:
         container = ttk.Frame(self.site_settings_window, padding=14)
         container.pack(fill="both", expand=True)
 
-        ttk.Label(
-            container,
-            text="Onglets: cart, checkout, checkout_success, experience, index, login, policy, product, register, seo",
-            font=("Segoe UI", 10, "bold"),
-        ).pack(anchor="w", pady=(0, 8))
-
         page_tabs = ttk.Notebook(container)
         page_tabs.pack(fill="both", expand=True)
 
@@ -1561,26 +1568,29 @@ class AdminApp:
         ttk.Label(parent, text=f"Paramètres — {page_key}.html", font=("Segoe UI", 10, "bold")).grid(
             row=0, column=0, columnspan=4, sticky="w", pady=(0, 10)
         )
-        ttk.Label(parent, text="Titre de page").grid(row=1, column=0, sticky="w", pady=4)
-        ttk.Entry(parent, textvariable=self.site_settings_vars[f"{page_key}_title_text"], width=52).grid(
-            row=1, column=1, columnspan=2, sticky="ew", padx=(8, 6), pady=4
+        ttk.Label(parent, text=PAGE_DESIGN_HINTS.get(page_key, ""), foreground="#475569").grid(
+            row=1, column=0, columnspan=4, sticky="w", pady=(0, 10)
         )
-        ttk.Label(parent, text="Sous-titre").grid(row=2, column=0, sticky="w", pady=4)
-        ttk.Entry(parent, textvariable=self.site_settings_vars[f"{page_key}_subtitle_text"], width=52).grid(
+        ttk.Label(parent, text="Titre de page").grid(row=2, column=0, sticky="w", pady=4)
+        ttk.Entry(parent, textvariable=self.site_settings_vars[f"{page_key}_title_text"], width=52).grid(
             row=2, column=1, columnspan=2, sticky="ew", padx=(8, 6), pady=4
         )
-        ttk.Label(parent, text="Texte contenu").grid(row=3, column=0, sticky="w", pady=4)
-        ttk.Entry(parent, textvariable=self.site_settings_vars[f"{page_key}_body_text"], width=52).grid(
+        ttk.Label(parent, text="Sous-titre").grid(row=3, column=0, sticky="w", pady=4)
+        ttk.Entry(parent, textvariable=self.site_settings_vars[f"{page_key}_subtitle_text"], width=52).grid(
             row=3, column=1, columnspan=2, sticky="ew", padx=(8, 6), pady=4
         )
-        ttk.Label(parent, text="Alignement du texte").grid(row=4, column=0, sticky="w", pady=4)
+        ttk.Label(parent, text="Texte contenu").grid(row=4, column=0, sticky="w", pady=4)
+        ttk.Entry(parent, textvariable=self.site_settings_vars[f"{page_key}_body_text"], width=52).grid(
+            row=4, column=1, columnspan=2, sticky="ew", padx=(8, 6), pady=4
+        )
+        ttk.Label(parent, text="Alignement du texte").grid(row=5, column=0, sticky="w", pady=4)
         ttk.Combobox(
             parent,
             textvariable=self.site_settings_vars[f"{page_key}_text_align"],
             values=("left", "center", "right"),
             state="readonly",
             width=18,
-        ).grid(row=4, column=1, sticky="w", padx=(8, 6), pady=4)
+        ).grid(row=5, column=1, sticky="w", padx=(8, 6), pady=4)
         color_preview = Label(
             parent,
             text=self.site_settings_vars[f"{page_key}_accent_color"].get(),
@@ -1589,18 +1599,62 @@ class AdminApp:
             borderwidth=1,
             background=self.site_settings_vars[f"{page_key}_accent_color"].get(),
         )
-        ttk.Label(parent, text="Couleur accent").grid(row=5, column=0, sticky="w", pady=4)
-        color_preview.grid(row=5, column=1, sticky="w", padx=(8, 6), pady=4)
+        ttk.Label(parent, text="Couleur accent").grid(row=6, column=0, sticky="w", pady=4)
+        color_preview.grid(row=6, column=1, sticky="w", padx=(8, 6), pady=4)
         ttk.Button(
             parent,
             text="Choisir",
             command=lambda k=f"{page_key}_accent_color", p=color_preview: self.choose_color(k, p),
-        ).grid(row=5, column=2, sticky="w", padx=(4, 0), pady=4)
+        ).grid(row=6, column=2, sticky="w", padx=(4, 0), pady=4)
+
+        ttk.Separator(parent, orient="horizontal").grid(row=7, column=0, columnspan=4, sticky="ew", pady=(10, 10))
+
+        ttk.Label(parent, text="Titre section principale").grid(row=8, column=0, sticky="w", pady=4)
+        ttk.Entry(parent, textvariable=self.site_settings_vars[f"{page_key}_section_title_text"], width=52).grid(
+            row=8, column=1, columnspan=2, sticky="ew", padx=(8, 6), pady=4
+        )
+        ttk.Label(parent, text="Sous-titre section").grid(row=9, column=0, sticky="w", pady=4)
+        ttk.Entry(parent, textvariable=self.site_settings_vars[f"{page_key}_section_subtitle_text"], width=52).grid(
+            row=9, column=1, columnspan=2, sticky="ew", padx=(8, 6), pady=4
+        )
+        ttk.Label(parent, text="Zone texte section").grid(row=10, column=0, sticky="w", pady=4)
+        ttk.Entry(parent, textvariable=self.site_settings_vars[f"{page_key}_section_body_text"], width=52).grid(
+            row=10, column=1, columnspan=2, sticky="ew", padx=(8, 6), pady=4
+        )
+        ttk.Label(parent, text="Texte bouton section").grid(row=11, column=0, sticky="w", pady=4)
+        ttk.Entry(parent, textvariable=self.site_settings_vars[f"{page_key}_section_button_text"], width=28).grid(
+            row=11, column=1, sticky="w", padx=(8, 6), pady=4
+        )
+
+        color_rows = (
+            ("section_bg_color", "Couleur fond section", 12),
+            ("section_text_color", "Couleur texte section", 13),
+            ("section_button_bg_color", "Couleur bouton section", 14),
+            ("section_button_text_color", "Couleur texte bouton", 15),
+        )
+        for suffix, label, color_row in color_rows:
+            key = f"{page_key}_{suffix}"
+            preview = Label(
+                parent,
+                text=self.site_settings_vars[key].get(),
+                width=16,
+                relief="solid",
+                borderwidth=1,
+                background=self.site_settings_vars[key].get(),
+            )
+            ttk.Label(parent, text=label).grid(row=color_row, column=0, sticky="w", pady=4)
+            preview.grid(row=color_row, column=1, sticky="w", padx=(8, 6), pady=4)
+            ttk.Button(
+                parent,
+                text="Choisir",
+                command=lambda k=key, p=preview: self.choose_color(k, p),
+            ).grid(row=color_row, column=2, sticky="w", padx=(4, 0), pady=4)
+
         ttk.Button(
             parent,
             text=f"Afficher {page_key} dans Aperçu rapide",
             command=lambda p=page_key: self.open_site_preview_window(p),
-        ).grid(row=6, column=0, columnspan=3, sticky="w", pady=(12, 0))
+        ).grid(row=16, column=0, columnspan=3, sticky="w", pady=(12, 0))
         parent.columnconfigure(1, weight=1)
 
     def reset_site_settings_form(self) -> None:
@@ -1622,10 +1676,20 @@ class AdminApp:
         self.site_preview_window.minsize(560, 420)
         frame = ttk.Frame(self.site_preview_window, padding=10)
         frame.pack(fill="both", expand=True)
+        scrollbar = ttk.Scrollbar(frame, orient="vertical")
+        scrollbar.pack(side="right", fill="y")
         self.preview_canvas = Canvas(frame, bg="#f5f7fb", highlightthickness=1, highlightbackground="#d1d5db")
-        self.preview_canvas.pack(fill="both", expand=True)
+        self.preview_canvas.pack(side="left", fill="both", expand=True)
+        self.preview_canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.configure(command=self.preview_canvas.yview)
+        self.preview_canvas.bind_all("<MouseWheel>", self._on_preview_mousewheel)
         self.preview_canvas.bind("<Configure>", lambda _event: self.update_site_preview())
         self.update_site_preview()
+
+    def _on_preview_mousewheel(self, event) -> None:
+        if not hasattr(self, "preview_canvas") or not self.preview_canvas.winfo_exists():
+            return
+        self.preview_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
     def update_site_preview(self) -> None:
         if not hasattr(self, "preview_canvas") or not self.preview_canvas.winfo_exists():
@@ -1633,40 +1697,118 @@ class AdminApp:
         c = self.preview_canvas
         c.delete("all")
         width = max(c.winfo_width(), 480)
-        height = max(c.winfo_height(), 320)
+        visible_height = max(c.winfo_height(), 320)
         scale_x = width / 900
-        scale_y = height / 600
         page_key = self.selected_preview_page
         header1 = self.site_settings_vars["header_bg_color"].get().strip() or DEFAULT_SITE_SETTINGS["header_bg_color"]
         bg = self.site_settings_vars["page_bg_color"].get().strip() or DEFAULT_SITE_SETTINGS["page_bg_color"]
-        ad_bg = self.site_settings_vars["ad_bg_color"].get().strip() or DEFAULT_SITE_SETTINGS["ad_bg_color"]
-        ad_text = self.site_settings_vars["ad_text_color"].get().strip() or DEFAULT_SITE_SETTINGS["ad_text_color"]
         ad_button = self.site_settings_vars[f"{page_key}_accent_color"].get().strip() or DEFAULT_SITE_SETTINGS[f"{page_key}_accent_color"]
+        section_bg = self.site_settings_vars[f"{page_key}_section_bg_color"].get().strip() or DEFAULT_SITE_SETTINGS[f"{page_key}_section_bg_color"]
+        section_text = self.site_settings_vars[f"{page_key}_section_text_color"].get().strip() or DEFAULT_SITE_SETTINGS[f"{page_key}_section_text_color"]
+        section_button_bg = self.site_settings_vars[f"{page_key}_section_button_bg_color"].get().strip() or DEFAULT_SITE_SETTINGS[f"{page_key}_section_button_bg_color"]
+        section_button_text = self.site_settings_vars[f"{page_key}_section_button_text_color"].get().strip() or DEFAULT_SITE_SETTINGS[f"{page_key}_section_button_text_color"]
         site_name = self.site_settings_vars["site_name"].get().strip() or DEFAULT_SITE_SETTINGS["site_name"]
         title = self.site_settings_vars[f"{page_key}_title_text"].get().strip() or page_key.replace("_", " ").title()
         subtitle = self.site_settings_vars[f"{page_key}_subtitle_text"].get().strip() or "Sous-titre de page"
         body_text = self.site_settings_vars[f"{page_key}_body_text"].get().strip() or "Aperçu du contenu personnalisé."
+        section_title = self.site_settings_vars[f"{page_key}_section_title_text"].get().strip() or "Section principale"
+        section_subtitle = self.site_settings_vars[f"{page_key}_section_subtitle_text"].get().strip() or "Sous-section visuelle"
+        section_body = self.site_settings_vars[f"{page_key}_section_body_text"].get().strip() or "Texte représentatif du contenu de la page."
+        section_button_text_label = self.site_settings_vars[f"{page_key}_section_button_text"].get().strip() or "Action"
         align = self.site_settings_vars[f"{page_key}_text_align"].get().strip() or "left"
         anchor = {"left": "w", "center": "center", "right": "e"}.get(align, "w")
         txt_x = {"left": 40 * scale_x, "center": width / 2, "right": width - (40 * scale_x)}.get(align, 40 * scale_x)
 
         c.configure(bg=bg)
-        c.create_rectangle(0, 0, width, 110 * scale_y, fill=header1, width=0)
+        c.create_rectangle(0, 0, width, 100, fill=header1, width=0)
         c.create_text(
             22 * scale_x,
-            28 * scale_y,
+            30,
             text=site_name,
             anchor="w",
             fill="#ffffff",
-            font=(self.site_settings_vars["site_name_font"].get() or "Segoe UI", int(16 * min(scale_x, scale_y)), "bold"),
+            font=(self.site_settings_vars["site_name_font"].get() or "Segoe UI", max(12, int(16 * scale_x)), "bold"),
         )
-        c.create_text(width - (24 * scale_x), 30 * scale_y, text=f"Page: {page_key}", anchor="e", fill="#dbeafe", font=("Segoe UI", int(10 * min(scale_x, scale_y))))
-        c.create_text(txt_x, 170 * scale_y, text=title[:84], anchor=anchor, fill=ad_text, font=("Segoe UI", int(22 * min(scale_x, scale_y)), "bold"))
-        c.create_text(txt_x, 218 * scale_y, text=subtitle[:120], anchor=anchor, fill=ad_text, font=("Segoe UI", int(12 * min(scale_x, scale_y))))
-        c.create_rectangle(30 * scale_x, 250 * scale_y, width - (30 * scale_x), 420 * scale_y, fill=ad_bg, outline="#cbd5e1")
-        c.create_text(txt_x, 280 * scale_y, text=body_text[:180], anchor=anchor, fill=ad_text, font=("Segoe UI", int(11 * min(scale_x, scale_y))))
-        c.create_rectangle(width / 2 - (90 * scale_x), 455 * scale_y, width / 2 + (90 * scale_x), 500 * scale_y, fill=ad_button, outline="")
-        c.create_text(width / 2, 477 * scale_y, text="Bouton action", fill="#ffffff", font=("Segoe UI", int(11 * min(scale_x, scale_y)), "bold"))
+        c.create_text(width - (24 * scale_x), 30, text=f"Page: {page_key}", anchor="e", fill="#dbeafe", font=("Segoe UI", 10))
+        c.create_text(txt_x, 140, text=title[:84], anchor=anchor, fill=section_text, font=("Segoe UI", 22, "bold"))
+        c.create_text(txt_x, 180, text=subtitle[:140], anchor=anchor, fill=section_text, font=("Segoe UI", 12))
+        c.create_text(txt_x, 210, text=body_text[:190], anchor=anchor, fill=section_text, font=("Segoe UI", 11))
+
+        self._draw_page_preview_layout(
+            c,
+            page_key=page_key,
+            width=width,
+            section_bg=section_bg,
+            section_text=section_text,
+            section_button_bg=section_button_bg,
+            section_button_text=section_button_text,
+            section_title=section_title,
+            section_subtitle=section_subtitle,
+            section_body=section_body,
+            section_button_text_label=section_button_text_label,
+            accent=ad_button,
+        )
+        content_height = 1420
+        c.configure(scrollregion=(0, 0, width, max(content_height, visible_height + 10)))
+
+    def _draw_page_preview_layout(
+        self,
+        canvas: Canvas,
+        *,
+        page_key: str,
+        width: int,
+        section_bg: str,
+        section_text: str,
+        section_button_bg: str,
+        section_button_text: str,
+        section_title: str,
+        section_subtitle: str,
+        section_body: str,
+        section_button_text_label: str,
+        accent: str,
+    ) -> None:
+        top = 250
+        left = 30
+        right = width - 30
+        canvas.create_rectangle(left, top, right, top + 240, fill=section_bg, outline="#cbd5e1")
+        canvas.create_text(left + 18, top + 24, text=section_title[:80], anchor="w", fill=section_text, font=("Segoe UI", 16, "bold"))
+        canvas.create_text(left + 18, top + 58, text=section_subtitle[:120], anchor="w", fill=section_text, font=("Segoe UI", 11))
+        canvas.create_text(left + 18, top + 96, text=section_body[:220], anchor="w", fill=section_text, font=("Segoe UI", 10))
+        canvas.create_rectangle(left + 18, top + 170, left + 200, top + 206, fill=section_button_bg, outline="")
+        canvas.create_text(left + 109, top + 188, text=section_button_text_label[:34], fill=section_button_text, font=("Segoe UI", 10, "bold"))
+
+        if page_key in {"index", "experience"}:
+            y = top + 270
+            for i in range(3):
+                x1 = left + (i * ((right - left - 24) / 3))
+                x2 = x1 + ((right - left - 48) / 3)
+                canvas.create_rectangle(x1, y, x2, y + 130, fill="#ffffff", outline="#dbe3ef")
+                canvas.create_text(x1 + 14, y + 20, text=f"Carte {i + 1}", anchor="w", fill=accent, font=("Segoe UI", 10, "bold"))
+                canvas.create_text(x1 + 14, y + 52, text="Contenu métrique / promo", anchor="w", fill="#334155", font=("Segoe UI", 9))
+        elif page_key in {"cart", "checkout"}:
+            y = top + 270
+            canvas.create_rectangle(left, y, width * 0.68, y + 420, fill="#ffffff", outline="#dbe3ef")
+            canvas.create_text(left + 14, y + 18, text="Liste/Formulaire", anchor="w", fill=accent, font=("Segoe UI", 10, "bold"))
+            canvas.create_rectangle(width * 0.7, y, right, y + 420, fill="#ffffff", outline="#dbe3ef")
+            canvas.create_text(width * 0.7 + 14, y + 18, text="Résumé facture", anchor="w", fill=accent, font=("Segoe UI", 10, "bold"))
+        elif page_key in {"login", "register", "checkout_success"}:
+            y = top + 280
+            box_w = min(500, right - left)
+            cx = width / 2
+            canvas.create_rectangle(cx - box_w / 2, y, cx + box_w / 2, y + 320, fill="#ffffff", outline="#dbe3ef")
+            canvas.create_text(cx, y + 26, text="Bloc central", anchor="center", fill=accent, font=("Segoe UI", 11, "bold"))
+            for i in range(3):
+                canvas.create_rectangle(cx - (box_w / 2) + 22, y + 60 + (i * 54), cx + (box_w / 2) - 22, y + 95 + (i * 54), fill="#f8fafc", outline="#e2e8f0")
+        elif page_key in {"product"}:
+            y = top + 270
+            canvas.create_rectangle(left, y, width * 0.54, y + 420, fill="#ffffff", outline="#dbe3ef")
+            canvas.create_text(left + 14, y + 18, text="Infos produit", anchor="w", fill=accent, font=("Segoe UI", 10, "bold"))
+            canvas.create_rectangle(width * 0.56, y, right, y + 420, fill="#ffffff", outline="#dbe3ef")
+            canvas.create_text(width * 0.56 + 14, y + 18, text="Galerie image", anchor="w", fill=accent, font=("Segoe UI", 10, "bold"))
+        else:
+            y = top + 270
+            canvas.create_rectangle(left, y, right, y + 420, fill="#ffffff", outline="#dbe3ef")
+            canvas.create_text(left + 14, y + 18, text="Section information", anchor="w", fill=accent, font=("Segoe UI", 10, "bold"))
 
     def save_site_settings(self) -> None:
         self._persist_site_settings()
