@@ -39,6 +39,26 @@ DEFAULT_SITE_SETTINGS = {
     "language_code": "fr",
 }
 
+PAGE_CUSTOMIZATION_KEYS = (
+    "cart",
+    "checkout",
+    "checkout_success",
+    "experience",
+    "index",
+    "login",
+    "policy",
+    "product",
+    "register",
+    "seo",
+)
+
+for page_key in PAGE_CUSTOMIZATION_KEYS:
+    DEFAULT_SITE_SETTINGS[f"{page_key}_title_text"] = ""
+    DEFAULT_SITE_SETTINGS[f"{page_key}_subtitle_text"] = ""
+    DEFAULT_SITE_SETTINGS[f"{page_key}_body_text"] = ""
+    DEFAULT_SITE_SETTINGS[f"{page_key}_accent_color"] = "#1f3a7a"
+    DEFAULT_SITE_SETTINGS[f"{page_key}_text_align"] = "left"
+
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
