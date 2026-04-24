@@ -16,7 +16,7 @@
   <title>{{ site_settings["site_name"] }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
 </head>
-<body style="--header-primary: {{ site_settings['header_bg_color'] }}; --header-secondary: {{ site_settings['header_secondary_color'] }}; --bg: {{ site_settings['page_bg_color'] }}; --ad-bg: {{ site_settings['ad_bg_color'] }}; --ad-text: {{ site_settings['ad_text_color'] }}; --site-font: {{ site_settings['site_name_font'] }}; --ad-button: {{ site_settings['ad_button_color'] }};">
+<body data-page-id="{{ page_id or page_customization['page_id'] }}" style="--header-primary: {{ site_settings['header_bg_color'] }}; --header-secondary: {{ site_settings['header_secondary_color'] }}; --bg: {{ site_settings['page_bg_color'] }}; --ad-bg: {{ site_settings['ad_bg_color'] }}; --ad-text: {{ site_settings['ad_text_color'] }}; --site-font: {{ site_settings['site_name_font'] }}; --ad-button: {{ site_settings['ad_button_color'] }}; --page-accent: {{ page_customization['accent_color'] }};">
   <header>
     <nav>
       <div class="logo" id="site-name-logo">{{ site_settings["site_name"] }}</div>
@@ -39,6 +39,11 @@
   </header>
 
   <main>
+    <section class="page-custom-intro align-{{ page_customization['text_align'] }}">
+      <h1 id="page-custom-title">{{ page_customization['title'] }}</h1>
+      <h3 id="page-custom-subtitle">{{ page_customization['subtitle'] }}</h3>
+      <p id="page-custom-body">{{ page_customization['body'] }}</p>
+    </section>
     {% with messages = get_flashed_messages() %}
       {% if messages %}
         <div class="flash">{{ messages[0] }}</div>
@@ -74,6 +79,24 @@
         document.body.style.setProperty('--ad-text', settings.ad_text_color || '#0c1f4c');
         document.body.style.setProperty('--site-font', settings.site_name_font || 'Segoe UI');
         document.body.style.setProperty('--ad-button', settings.ad_button_color || '#1f3a7a');
+        const pageId = document.body.dataset.pageId || 'index';
+        const pageTitle = settings[`${pageId}_title_text`] || '';
+        const pageSubtitle = settings[`${pageId}_subtitle_text`] || '';
+        const pageBody = settings[`${pageId}_body_text`] || '';
+        const pageAccent = settings[`${pageId}_accent_color`] || '#1f3a7a';
+        const pageAlign = settings[`${pageId}_text_align`] || 'left';
+        document.body.style.setProperty('--page-accent', pageAccent);
+        const intro = document.querySelector('.page-custom-intro');
+        if (intro) {
+          intro.classList.remove('align-left', 'align-center', 'align-right');
+          intro.classList.add(`align-${pageAlign}`);
+        }
+        const pageTitleEl = document.getElementById('page-custom-title');
+        const pageSubtitleEl = document.getElementById('page-custom-subtitle');
+        const pageBodyEl = document.getElementById('page-custom-body');
+        if (pageTitleEl) pageTitleEl.textContent = pageTitle;
+        if (pageSubtitleEl) pageSubtitleEl.textContent = pageSubtitle;
+        if (pageBodyEl) pageBodyEl.textContent = pageBody;
 
         const logo = document.getElementById('site-name-logo');
         if (logo) logo.textContent = settings.site_name || logo.textContent;
@@ -109,7 +132,7 @@
       }
 
       pollSettings();
-      window.setInterval(pollSettings, 3000);
+      window.setInterval(pollSettings, 1000);
     })();
   </script>
 

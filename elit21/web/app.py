@@ -399,6 +399,18 @@ def create_app():
     def get_site_settings_payload() -> dict[str, str]:
         return get_site_settings()
 
+    def get_page_customization(page_id: str) -> dict[str, str]:
+        settings = get_site_settings_payload()
+        normalized = (page_id or "index").strip()
+        return {
+            "page_id": normalized,
+            "title": settings.get(f"{normalized}_title_text", "").strip(),
+            "subtitle": settings.get(f"{normalized}_subtitle_text", "").strip(),
+            "body": settings.get(f"{normalized}_body_text", "").strip(),
+            "accent_color": settings.get(f"{normalized}_accent_color", "#1f3a7a").strip() or "#1f3a7a",
+            "text_align": settings.get(f"{normalized}_text_align", "left").strip() or "left",
+        }
+
     def get_shipping_fee() -> float:
         settings = get_site_settings_payload()
         raw_shipping_fee = str(settings.get("shipping_fee") or "0").strip()
@@ -571,6 +583,12 @@ def create_app():
     def inject_cart_metrics():
         settings = get_site_settings_payload()
         language_code = normalize_language(settings.get("language_code"))
+        page_id = request.endpoint or "index"
+        page_mapping = {
+            "seo_page": "seo",
+            "product_detail": "product",
+        }
+        resolved_page_id = page_mapping.get(page_id, page_id)
         return {
             "cart_count": cart_count(),
             "site_settings": settings,
@@ -578,6 +596,7 @@ def create_app():
             "format_money": format_money,
             "current_language": language_code,
             "tr": lambda key: tr(language_code, key),
+            "page_customization": get_page_customization(resolved_page_id),
         }
 
     def login_required(view_func):
@@ -675,20 +694,21 @@ def create_app():
             paypal_client_id=get_paypal_settings()["client_id"],
             paypal_env=get_paypal_settings()["env"],
             site_settings=get_site_settings_payload(),
+            page_id="index",
         )
 
     @app.route("/policy")
     def policy():
-        return render_template("policy.html")
+        return render_template("policy.html", page_id="policy")
 
     @app.route("/seo")
     def seo_page():
-        return render_template("seo.html")
+        return render_template("seo.html", page_id="seo")
 
     @app.route("/experience")
     def experience():
         snapshot = build_experience_snapshot()
-        return render_template("experience.html", snapshot=snapshot)
+        return render_template("experience.html", snapshot=snapshot, page_id="experience")
 
     @app.route("/product/<int:product_id>")
     def product_detail(product_id: int):
@@ -722,6 +742,7 @@ def create_app():
             colors=colors,
             sizes=sizes,
             inventory=inventory,
+            page_id="product",
         )
 
     @app.route("/cart")
@@ -735,6 +756,7 @@ def create_app():
             subtotal=subtotal,
             shipping_fee=shipping_fee,
             total=total,
+            page_id="cart",
         )
 
     @app.route("/cart/add/<int:product_id>", methods=["POST"])
@@ -854,7 +876,7 @@ def create_app():
             conn.close()
             flash(t("account_created_login"))
             return redirect(url_for("login"))
-        return render_template("register.html")
+        return render_template("register.html", page_id="register")
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -873,7 +895,7 @@ def create_app():
             session["user_id"] = user["id"]
             session["user_name"] = user["full_name"]
             return redirect(url_for("index"))
-        return render_template("login.html")
+        return render_template("login.html", page_id="login")
 
     @app.route("/logout")
     def logout():
@@ -901,6 +923,7 @@ def create_app():
             total=total,
             paypal_configured=ensure_paypal_configured()[0],
             paypal_currency_code=currency["code"],
+            page_id="checkout",
         )
 
     @app.route("/api/checkout/create-paypal-order", methods=["POST"])
@@ -1406,7 +1429,7 @@ def create_app():
         ):
             flash(t("order_not_confirmed"))
             return redirect(url_for("checkout"))
-        return render_template("checkout_success.html", order=order)
+        return render_template("checkout_success.html", order=order, page_id="checkout_success")
 
     return app
 
