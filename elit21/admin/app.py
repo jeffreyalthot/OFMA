@@ -1565,6 +1565,9 @@ class AdminApp:
         self.update_site_preview()
 
     def _build_page_customization_tab(self, parent: ttk.Frame, page_key: str) -> None:
+        if page_key == "experience":
+            self._build_experience_customization_tab(parent, page_key)
+            return
         ttk.Label(parent, text=f"Paramètres — {page_key}.html", font=("Segoe UI", 10, "bold")).grid(
             row=0, column=0, columnspan=4, sticky="w", pady=(0, 10)
         )
@@ -1653,6 +1656,102 @@ class AdminApp:
         ttk.Button(
             parent,
             text=f"Afficher {page_key} dans Aperçu rapide",
+            command=lambda p=page_key: self.open_site_preview_window(p),
+        ).grid(row=16, column=0, columnspan=3, sticky="w", pady=(12, 0))
+        parent.columnconfigure(1, weight=1)
+
+    def _build_experience_customization_tab(self, parent: ttk.Frame, page_key: str) -> None:
+        ttk.Label(parent, text="Paramètres — experience.html", font=("Segoe UI", 10, "bold")).grid(
+            row=0, column=0, columnspan=4, sticky="w", pady=(0, 10)
+        )
+        ttk.Label(
+            parent,
+            text="Structure: en-tête + grille de cartes (2 colonnes) + section produits récents pleine largeur.",
+            foreground="#475569",
+        ).grid(row=1, column=0, columnspan=4, sticky="w", pady=(0, 10))
+
+        ttk.Label(parent, text="Titre principal").grid(row=2, column=0, sticky="w", pady=4)
+        ttk.Entry(parent, textvariable=self.site_settings_vars[f"{page_key}_title_text"], width=52).grid(
+            row=2, column=1, columnspan=2, sticky="ew", padx=(8, 6), pady=4
+        )
+        ttk.Label(parent, text="Sous-titre introduction").grid(row=3, column=0, sticky="w", pady=4)
+        ttk.Entry(parent, textvariable=self.site_settings_vars[f"{page_key}_subtitle_text"], width=52).grid(
+            row=3, column=1, columnspan=2, sticky="ew", padx=(8, 6), pady=4
+        )
+        ttk.Label(parent, text="Texte descriptif").grid(row=4, column=0, sticky="w", pady=4)
+        ttk.Entry(parent, textvariable=self.site_settings_vars[f"{page_key}_body_text"], width=52).grid(
+            row=4, column=1, columnspan=2, sticky="ew", padx=(8, 6), pady=4
+        )
+        ttk.Label(parent, text="Alignement du texte de l'en-tête").grid(row=5, column=0, sticky="w", pady=4)
+        ttk.Combobox(
+            parent,
+            textvariable=self.site_settings_vars[f"{page_key}_text_align"],
+            values=("left", "center", "right"),
+            state="readonly",
+            width=18,
+        ).grid(row=5, column=1, sticky="w", padx=(8, 6), pady=4)
+        accent_preview = Label(
+            parent,
+            text=self.site_settings_vars[f"{page_key}_accent_color"].get(),
+            width=16,
+            relief="solid",
+            borderwidth=1,
+            background=self.site_settings_vars[f"{page_key}_accent_color"].get(),
+        )
+        ttk.Label(parent, text="Couleur accent (liens / surbrillance)").grid(row=6, column=0, sticky="w", pady=4)
+        accent_preview.grid(row=6, column=1, sticky="w", padx=(8, 6), pady=4)
+        ttk.Button(
+            parent,
+            text="Choisir",
+            command=lambda k=f"{page_key}_accent_color", p=accent_preview: self.choose_color(k, p),
+        ).grid(row=6, column=2, sticky="w", padx=(4, 0), pady=4)
+
+        ttk.Separator(parent, orient="horizontal").grid(row=7, column=0, columnspan=4, sticky="ew", pady=(10, 10))
+
+        ttk.Label(parent, text="Carte 1 — titre (indicateurs)").grid(row=8, column=0, sticky="w", pady=4)
+        ttk.Entry(parent, textvariable=self.site_settings_vars[f"{page_key}_section_title_text"], width=52).grid(
+            row=8, column=1, columnspan=2, sticky="ew", padx=(8, 6), pady=4
+        )
+        ttk.Label(parent, text="Carte 2 — titre (catégories)").grid(row=9, column=0, sticky="w", pady=4)
+        ttk.Entry(parent, textvariable=self.site_settings_vars[f"{page_key}_section_subtitle_text"], width=52).grid(
+            row=9, column=1, columnspan=2, sticky="ew", padx=(8, 6), pady=4
+        )
+        ttk.Label(parent, text="Carte 3 — titre (architecture de prix)").grid(row=10, column=0, sticky="w", pady=4)
+        ttk.Entry(parent, textvariable=self.site_settings_vars[f"{page_key}_section_body_text"], width=52).grid(
+            row=10, column=1, columnspan=2, sticky="ew", padx=(8, 6), pady=4
+        )
+        ttk.Label(parent, text="Carte 4 — titre (produits récents)").grid(row=11, column=0, sticky="w", pady=4)
+        ttk.Entry(parent, textvariable=self.site_settings_vars[f"{page_key}_section_button_text"], width=28).grid(
+            row=11, column=1, sticky="w", padx=(8, 6), pady=4
+        )
+
+        color_rows = (
+            ("section_bg_color", "Couleur fond carte", 12),
+            ("section_text_color", "Couleur texte carte", 13),
+            ("section_button_bg_color", "Couleur pastille métrique", 14),
+            ("section_button_text_color", "Couleur texte pastille", 15),
+        )
+        for suffix, label, color_row in color_rows:
+            key = f"{page_key}_{suffix}"
+            preview = Label(
+                parent,
+                text=self.site_settings_vars[key].get(),
+                width=16,
+                relief="solid",
+                borderwidth=1,
+                background=self.site_settings_vars[key].get(),
+            )
+            ttk.Label(parent, text=label).grid(row=color_row, column=0, sticky="w", pady=4)
+            preview.grid(row=color_row, column=1, sticky="w", padx=(8, 6), pady=4)
+            ttk.Button(
+                parent,
+                text="Choisir",
+                command=lambda k=key, p=preview: self.choose_color(k, p),
+            ).grid(row=color_row, column=2, sticky="w", padx=(4, 0), pady=4)
+
+        ttk.Button(
+            parent,
+            text="Afficher experience dans Aperçu rapide",
             command=lambda p=page_key: self.open_site_preview_window(p),
         ).grid(row=16, column=0, columnspan=3, sticky="w", pady=(12, 0))
         parent.columnconfigure(1, weight=1)
@@ -1770,6 +1869,25 @@ class AdminApp:
         top = 250
         left = 30
         right = width - 30
+        if page_key == "experience":
+            self._draw_experience_preview_layout(
+                canvas,
+                width=width,
+                left=left,
+                right=right,
+                top=top,
+                section_bg=section_bg,
+                section_text=section_text,
+                section_button_bg=section_button_bg,
+                section_button_text=section_button_text,
+                section_title=section_title,
+                section_subtitle=section_subtitle,
+                section_body=section_body,
+                section_button_text_label=section_button_text_label,
+                accent=accent,
+            )
+            return
+
         canvas.create_rectangle(left, top, right, top + 240, fill=section_bg, outline="#cbd5e1")
         canvas.create_text(left + 18, top + 24, text=section_title[:80], anchor="w", fill=section_text, font=("Segoe UI", 16, "bold"))
         canvas.create_text(left + 18, top + 58, text=section_subtitle[:120], anchor="w", fill=section_text, font=("Segoe UI", 11))
@@ -1809,6 +1927,87 @@ class AdminApp:
             y = top + 270
             canvas.create_rectangle(left, y, right, y + 420, fill="#ffffff", outline="#dbe3ef")
             canvas.create_text(left + 14, y + 18, text="Section information", anchor="w", fill=accent, font=("Segoe UI", 10, "bold"))
+
+    def _draw_experience_preview_layout(
+        self,
+        canvas: Canvas,
+        *,
+        width: int,
+        left: int,
+        right: int,
+        top: int,
+        section_bg: str,
+        section_text: str,
+        section_button_bg: str,
+        section_button_text: str,
+        section_title: str,
+        section_subtitle: str,
+        section_body: str,
+        section_button_text_label: str,
+        accent: str,
+    ) -> None:
+        gap = 16
+        column_width = (right - left - gap) / 2
+        card_h = 190
+        metrics_top = top + 20
+
+        cards = [
+            (section_title or "Indicateurs marché en direct", "Produits: 128 | Catégories: 14 | Prix moyen: 79"),
+            (section_subtitle or "Catégories dominantes", "Outdoor 42  •  Running 31  •  Techwear 19"),
+            (section_body or "Architecture de prix", "Entry 21  •  Core 77  •  Premium 30"),
+        ]
+
+        for idx, (title, hint) in enumerate(cards):
+            row = idx // 2
+            col = idx % 2
+            x1 = left + (col * (column_width + gap))
+            y1 = metrics_top + (row * (card_h + gap))
+            x2 = x1 + column_width
+            y2 = y1 + card_h
+            canvas.create_rectangle(x1, y1, x2, y2, fill=section_bg, outline="#dbe3ef")
+            canvas.create_text(x1 + 16, y1 + 24, text=title[:80], anchor="w", fill=section_text, font=("Segoe UI", 11, "bold"))
+            canvas.create_rectangle(x1 + 16, y1 + 46, x1 + 130, y1 + 70, fill=section_button_bg, outline="")
+            canvas.create_text(
+                x1 + 73,
+                y1 + 58,
+                text="Vue synthèse",
+                fill=section_button_text,
+                font=("Segoe UI", 8, "bold"),
+            )
+            canvas.create_text(x1 + 16, y1 + 98, text=hint, anchor="w", fill=accent, font=("Segoe UI", 9))
+            canvas.create_text(
+                x1 + 16,
+                y2 - 22,
+                text="Bloc inspiré de experience.html / .experience-card",
+                anchor="w",
+                fill="#64748b",
+                font=("Segoe UI", 8),
+            )
+
+        recent_y = metrics_top + (2 * (card_h + gap))
+        recent_h = 260
+        canvas.create_rectangle(left, recent_y, right, recent_y + recent_h, fill=section_bg, outline="#dbe3ef")
+        canvas.create_text(
+            left + 16,
+            recent_y + 24,
+            text=(section_button_text_label or "Dernières nouveautés")[:80],
+            anchor="w",
+            fill=section_text,
+            font=("Segoe UI", 11, "bold"),
+        )
+
+        item_gap = 12
+        item_w = (right - left - 16 * 2 - item_gap * 2) / 3
+        for i in range(3):
+            x1 = left + 16 + i * (item_w + item_gap)
+            x2 = x1 + item_w
+            y1 = recent_y + 42
+            y2 = recent_y + recent_h - 16
+            canvas.create_rectangle(x1, y1, x2, y2, fill="#ffffff", outline="#e2e8f0")
+            canvas.create_rectangle(x1 + 8, y1 + 8, x2 - 8, y1 + 72, fill="#edf2f7", outline="")
+            canvas.create_text(x1 + 10, y1 + 88, text=f"Produit {i + 1}", anchor="w", fill=section_text, font=("Segoe UI", 9, "bold"))
+            canvas.create_text(x1 + 10, y1 + 106, text="Description courte...", anchor="w", fill="#64748b", font=("Segoe UI", 8))
+            canvas.create_text(x1 + 10, y2 - 14, text="$00.00", anchor="w", fill=accent, font=("Segoe UI", 9, "bold"))
 
     def save_site_settings(self) -> None:
         self._persist_site_settings()
