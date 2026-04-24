@@ -16,7 +16,7 @@
   <title>{{ site_settings["site_name"] }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
 </head>
-<body data-page-id="{{ page_id or page_customization['page_id'] }}" style="--header-primary: {{ site_settings['header_bg_color'] }}; --header-secondary: {{ site_settings['header_secondary_color'] }}; --bg: {{ site_settings['page_bg_color'] }}; --ad-bg: {{ site_settings['ad_bg_color'] }}; --ad-text: {{ site_settings['ad_text_color'] }}; --site-font: {{ site_settings['site_name_font'] }}; --ad-button: {{ site_settings['ad_button_color'] }}; --page-accent: {{ page_customization['accent_color'] }};">
+<body data-page-id="{{ page_id or page_customization['page_id'] }}" style="--header-primary: {{ site_settings['header_bg_color'] }}; --header-secondary: {{ site_settings['header_secondary_color'] }}; --bg: {{ site_settings['page_bg_color'] }}; --ad-bg: {{ site_settings['ad_bg_color'] }}; --ad-text: {{ site_settings['ad_text_color'] }}; --site-font: {{ site_settings['site_name_font'] }}; --ad-button: {{ site_settings['ad_button_color'] }}; --page-accent: {{ page_customization['accent_color'] }}; --page-section-bg: {{ page_customization['section_bg_color'] }}; --page-section-text: {{ page_customization['section_text_color'] }}; --page-section-button-bg: {{ page_customization['section_button_bg_color'] }}; --page-section-button-text: {{ page_customization['section_button_text_color'] }};">
   <header>
     <nav>
       <div class="logo" id="site-name-logo">{{ site_settings["site_name"] }}</div>
@@ -85,7 +85,19 @@
         const pageBody = settings[`${pageId}_body_text`] || '';
         const pageAccent = settings[`${pageId}_accent_color`] || '#1f3a7a';
         const pageAlign = settings[`${pageId}_text_align`] || 'left';
+        const sectionTitle = settings[`${pageId}_section_title_text`] || '';
+        const sectionSubtitle = settings[`${pageId}_section_subtitle_text`] || '';
+        const sectionBody = settings[`${pageId}_section_body_text`] || '';
+        const sectionButtonText = settings[`${pageId}_section_button_text`] || '';
+        const sectionBg = settings[`${pageId}_section_bg_color`] || '#ffffff';
+        const sectionText = settings[`${pageId}_section_text_color`] || '#0c1f4c';
+        const sectionButtonBg = settings[`${pageId}_section_button_bg_color`] || '#1f3a7a';
+        const sectionButtonTextColor = settings[`${pageId}_section_button_text_color`] || '#ffffff';
         document.body.style.setProperty('--page-accent', pageAccent);
+        document.body.style.setProperty('--page-section-bg', sectionBg);
+        document.body.style.setProperty('--page-section-text', sectionText);
+        document.body.style.setProperty('--page-section-button-bg', sectionButtonBg);
+        document.body.style.setProperty('--page-section-button-text', sectionButtonTextColor);
         const intro = document.querySelector('.page-custom-intro');
         if (intro) {
           intro.classList.remove('align-left', 'align-center', 'align-right');
@@ -97,6 +109,18 @@
         if (pageTitleEl) pageTitleEl.textContent = pageTitle;
         if (pageSubtitleEl) pageSubtitleEl.textContent = pageSubtitle;
         if (pageBodyEl) pageBodyEl.textContent = pageBody;
+        const sectionTitleEl = document.getElementById('page-custom-section-title');
+        const sectionSubtitleEl = document.getElementById('page-custom-section-subtitle');
+        const sectionBodyEl = document.getElementById('page-custom-section-body');
+        const sectionButtonEls = document.querySelectorAll('[data-role="card-pay-label"]');
+        if (sectionTitleEl && sectionTitle) sectionTitleEl.textContent = sectionTitle;
+        if (sectionSubtitleEl && sectionSubtitle) sectionSubtitleEl.textContent = sectionSubtitle;
+        if (sectionBodyEl && sectionBody) sectionBodyEl.textContent = sectionBody;
+        if (sectionButtonText && sectionButtonEls && sectionButtonEls.length) {
+          sectionButtonEls.forEach((el) => {
+            el.textContent = sectionButtonText;
+          });
+        }
 
         const logo = document.getElementById('site-name-logo');
         if (logo) logo.textContent = settings.site_name || logo.textContent;

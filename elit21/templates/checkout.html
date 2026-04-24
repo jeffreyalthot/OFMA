@@ -2,9 +2,12 @@
 
 {% block content %}
 <div class="checkout-grid">
-  <div class="checkout-form">
-    <h2>{{ tr("secure_checkout") }}</h2>
-    <p>{{ tr("checkout_intro") }}</p>
+  <div class="checkout-form checkout-custom-surface">
+    <h2 id="page-custom-section-title">{{ page_customization['section_title'] or tr("secure_checkout") }}</h2>
+    <p id="page-custom-section-subtitle">{{ page_customization['section_subtitle'] or tr("checkout_intro") }}</p>
+    <p id="page-custom-section-body" class="muted checkout-custom-helper">
+      {{ page_customization['section_body'] or tr("complete_shipping_info") }}
+    </p>
     <form id="checkout-form" class="order-form">
       <label for="customer_name">{{ tr("full_name") }}</label>
       <input id="customer_name" name="customer_name" placeholder="{{ tr('full_name_placeholder') }}" required />
@@ -42,15 +45,17 @@
           <div id="card-cvv" class="card-field"></div>
         </div>
       </div>
-      <button id="card-pay-button" type="button" class="action-button">{{ tr("pay_by_card") }}</button>
+      <button id="card-pay-button" type="button" class="action-button" data-role="card-pay-label">
+        {{ page_customization['section_button_text'] or tr("pay_by_card") }}
+      </button>
     </div>
     {% if not paypal_configured %}
       <p class="flash">{{ tr("paypal_env_config") }}</p>
     {% endif %}
   </div>
 
-  <div class="checkout-summary">
-    <h3>{{ tr("invoice") }}</h3>
+  <div class="checkout-summary checkout-custom-surface">
+    <h3 data-role="card-pay-label">{{ page_customization['section_button_text'] or tr("invoice") }}</h3>
     <ul>
       {% for item in items %}
         <li>
