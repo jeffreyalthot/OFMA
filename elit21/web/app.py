@@ -409,6 +409,14 @@ def create_app():
             "body": settings.get(f"{normalized}_body_text", "").strip(),
             "accent_color": settings.get(f"{normalized}_accent_color", "#1f3a7a").strip() or "#1f3a7a",
             "text_align": settings.get(f"{normalized}_text_align", "left").strip() or "left",
+            "section_title": settings.get(f"{normalized}_section_title_text", "").strip(),
+            "section_subtitle": settings.get(f"{normalized}_section_subtitle_text", "").strip(),
+            "section_body": settings.get(f"{normalized}_section_body_text", "").strip(),
+            "section_button_text": settings.get(f"{normalized}_section_button_text", "").strip(),
+            "section_bg_color": settings.get(f"{normalized}_section_bg_color", "#ffffff").strip() or "#ffffff",
+            "section_text_color": settings.get(f"{normalized}_section_text_color", "#0c1f4c").strip() or "#0c1f4c",
+            "section_button_bg_color": settings.get(f"{normalized}_section_button_bg_color", "#1f3a7a").strip() or "#1f3a7a",
+            "section_button_text_color": settings.get(f"{normalized}_section_button_text_color", "#ffffff").strip() or "#ffffff",
         }
 
     def get_shipping_fee() -> float:

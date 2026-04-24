@@ -387,6 +387,23 @@ main {
   padding: 2rem;
 }
 
+.checkout-custom-surface {
+  background: var(--page-section-bg);
+  color: var(--page-section-text);
+  border: 1px solid color-mix(in srgb, var(--page-accent) 24%, #ffffff);
+}
+
+.checkout-custom-surface h2,
+.checkout-custom-surface h3,
+.checkout-custom-surface label {
+  color: var(--page-section-text);
+}
+
+.checkout-custom-helper {
+  margin-top: 0.45rem;
+  color: color-mix(in srgb, var(--page-section-text) 70%, #64748b);
+}
+
 .order-form {
   display: flex;
   flex-direction: column;
@@ -397,7 +414,9 @@ main {
 .order-form input {
   padding: 0.8rem 1rem;
   border-radius: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid color-mix(in srgb, var(--page-accent) 24%, #e2e8f0);
+  color: var(--page-section-text);
+  background: color-mix(in srgb, var(--page-section-bg) 92%, #ffffff);
 }
 
 .order-form button {
@@ -418,7 +437,7 @@ main {
   display: flex;
   justify-content: space-between;
   padding: 0.4rem 0;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid color-mix(in srgb, var(--page-accent) 15%, #f1f5f9);
 }
 
 .muted {
@@ -426,6 +445,16 @@ main {
 }
 
 .paypal-box {
+  margin-top: 1rem;
+}
+
+#card-pay-button {
+  background: var(--page-section-button-bg);
+  color: var(--page-section-button-text);
+  border: none;
+  border-radius: 999px;
+  padding: 0.75rem 1rem;
+  font-weight: 700;
   margin-top: 1rem;
 }
 

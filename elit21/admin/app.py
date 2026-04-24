@@ -1903,12 +1903,79 @@ class AdminApp:
                 canvas.create_rectangle(x1, y, x2, y + 130, fill="#ffffff", outline="#dbe3ef")
                 canvas.create_text(x1 + 14, y + 20, text=f"Carte {i + 1}", anchor="w", fill=accent, font=("Segoe UI", 10, "bold"))
                 canvas.create_text(x1 + 14, y + 52, text="Contenu métrique / promo", anchor="w", fill="#334155", font=("Segoe UI", 9))
-        elif page_key in {"cart", "checkout"}:
+        elif page_key == "cart":
             y = top + 270
             canvas.create_rectangle(left, y, width * 0.68, y + 420, fill="#ffffff", outline="#dbe3ef")
             canvas.create_text(left + 14, y + 18, text="Liste/Formulaire", anchor="w", fill=accent, font=("Segoe UI", 10, "bold"))
             canvas.create_rectangle(width * 0.7, y, right, y + 420, fill="#ffffff", outline="#dbe3ef")
             canvas.create_text(width * 0.7 + 14, y + 18, text="Résumé facture", anchor="w", fill=accent, font=("Segoe UI", 10, "bold"))
+        elif page_key == "checkout":
+            y = top + 270
+            form_right = width * 0.68
+            summary_left = width * 0.7
+            canvas.create_rectangle(left, y, form_right, y + 420, fill=section_bg, outline="#dbe3ef")
+            canvas.create_text(
+                left + 14,
+                y + 20,
+                text=(section_title or "Checkout sécurisé")[:62],
+                anchor="w",
+                fill=section_text,
+                font=("Segoe UI", 11, "bold"),
+            )
+            canvas.create_text(
+                left + 14,
+                y + 44,
+                text=(section_subtitle or "Complétez vos coordonnées")[:78],
+                anchor="w",
+                fill=section_text,
+                font=("Segoe UI", 9),
+            )
+            canvas.create_text(
+                left + 14,
+                y + 64,
+                text=(section_body or "Adresse livraison + validation paiement")[:88],
+                anchor="w",
+                fill=accent,
+                font=("Segoe UI", 8),
+            )
+            field_width = form_right - left - 28
+            for i in range(6):
+                input_top = y + 90 + (i * 38)
+                canvas.create_rectangle(
+                    left + 14,
+                    input_top,
+                    left + 14 + field_width,
+                    input_top + 24,
+                    fill="#f8fafc",
+                    outline="#dbe3ef",
+                )
+            paypal_top = y + 334
+            canvas.create_rectangle(left + 14, paypal_top, left + 14 + field_width, paypal_top + 34, fill="#eef2ff", outline="#c7d2fe")
+            canvas.create_text(left + 24, paypal_top + 18, text="PayPal", anchor="w", fill=accent, font=("Segoe UI", 10, "bold"))
+            canvas.create_rectangle(
+                left + 14,
+                paypal_top + 44,
+                left + 190,
+                paypal_top + 74,
+                fill=section_button_bg,
+                outline="",
+            )
+            canvas.create_text(
+                left + 102,
+                paypal_top + 59,
+                text=section_button_text_label[:30],
+                fill=section_button_text,
+                font=("Segoe UI", 9, "bold"),
+            )
+            canvas.create_rectangle(summary_left, y, right, y + 420, fill=section_bg, outline="#dbe3ef")
+            canvas.create_text(summary_left + 14, y + 20, text="Facture", anchor="w", fill=section_text, font=("Segoe UI", 10, "bold"))
+            for i in range(5):
+                line_y = y + 56 + (i * 32)
+                canvas.create_text(summary_left + 14, line_y, text=f"Article {i + 1}", anchor="w", fill="#475569", font=("Segoe UI", 8))
+                canvas.create_text(right - 14, line_y, text="$00.00", anchor="e", fill=accent, font=("Segoe UI", 8, "bold"))
+            canvas.create_line(summary_left + 14, y + 250, right - 14, y + 250, fill="#cbd5e1")
+            canvas.create_text(summary_left + 14, y + 278, text="Total", anchor="w", fill=section_text, font=("Segoe UI", 9, "bold"))
+            canvas.create_text(right - 14, y + 278, text="$000.00", anchor="e", fill=accent, font=("Segoe UI", 10, "bold"))
         elif page_key in {"login", "register", "checkout_success"}:
             y = top + 280
             box_w = min(500, right - left)
