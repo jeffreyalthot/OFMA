@@ -9,7 +9,7 @@ import os
 import urllib.error
 import urllib.request
 from decimal import Decimal, ROUND_HALF_UP
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
 
@@ -117,6 +117,41 @@ def create_app():
     )
     app.secret_key = os.getenv("ELIT21_SECRET", "elit21-secret")
     app.logger.setLevel(logging.DEBUG if paypal_debug_enabled() else logging.INFO)
+    app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+    )
+
+    login_attempts: dict[str, list[datetime]] = {}
+    login_limit_window = timedelta(minutes=10)
+    login_limit_max_attempts = 5
+    blocked_endpoints = {
+        "create_paypal_order",
+        "capture_paypal_order",
+    }
+
+    @app.before_request
+    def enforce_https_and_sensitive_rate_limit():
+        if not request.is_secure and request.headers.get("X-Forwarded-Proto", "http") != "https":
+            if request.endpoint in blocked_endpoints:
+                return jsonify({"error": "HTTPS requis pour cette action."}), 400
+
+    @app.after_request
+    def add_security_headers(response):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "img-src 'self' data: https:; "
+            "script-src 'self' https://www.paypal.com https://www.sandbox.paypal.com; "
+            "style-src 'self' 'unsafe-inline'; "
+            "frame-src https://www.paypal.com https://www.sandbox.paypal.com; "
+            "connect-src 'self' https://www.paypal.com https://www.sandbox.paypal.com; "
+            "base-uri 'self'; form-action 'self'; frame-ancestors 'none';"
+        )
+        return response
 
     init_db()
 
@@ -713,6 +748,36 @@ def create_app():
     def seo_page():
         return render_template("seo.html", page_id="seo")
 
+    @app.route("/robots.txt")
+    def robots_txt():
+        robots = "\n".join(
+            [
+                "User-agent: *",
+                "Allow: /",
+                f"Sitemap: {url_for('sitemap_xml', _external=True)}",
+            ]
+        )
+        return app.response_class(robots, mimetype="text/plain")
+
+    @app.route("/sitemap.xml")
+    def sitemap_xml():
+        pages = [
+            url_for("index", _external=True),
+            url_for("policy", _external=True),
+            url_for("seo_page", _external=True),
+            url_for("experience", _external=True),
+        ]
+        xml_urls = "\n".join(
+            [f"<url><loc>{page}</loc></url>" for page in pages]
+        )
+        xml = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+            f"{xml_urls}\n"
+            "</urlset>"
+        )
+        return app.response_class(xml, mimetype="application/xml")
+
     @app.route("/experience")
     def experience():
         snapshot = build_experience_snapshot()
@@ -891,6 +956,12 @@ def create_app():
         if request.method == "POST":
             email = request.form.get("email", "").strip().lower()
             password = request.form.get("password", "")
+            now = datetime.utcnow()
+            attempts = login_attempts.get(email, [])
+            attempts = [attempt for attempt in attempts if now - attempt < login_limit_window]
+            if len(attempts) >= login_limit_max_attempts:
+                flash("Trop de tentatives. Réessayez dans quelques minutes.")
+                return redirect(url_for("login"))
             conn = get_connection()
             user = conn.execute(
                 "SELECT * FROM users WHERE email = ?",
@@ -898,8 +969,11 @@ def create_app():
             ).fetchone()
             conn.close()
             if not user or not verify_password(password, str(user["password_hash"])):
+                attempts.append(now)
+                login_attempts[email] = attempts
                 flash(t("invalid_credentials"))
                 return redirect(url_for("login"))
+            login_attempts.pop(email, None)
             session["user_id"] = user["id"]
             session["user_name"] = user["full_name"]
             return redirect(url_for("index"))

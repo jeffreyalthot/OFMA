@@ -13,14 +13,17 @@
   <meta property="og:image" content="{{ url_for('static', filename='brand-mark.svg', _external=True) }}" />
   <meta property="og:url" content="{{ request.url }}" />
   <link rel="canonical" href="{{ request.base_url }}" />
+  <meta name="theme-color" content="{{ site_settings['header_bg_color'] }}" />
   <title>{{ site_settings["site_name"] }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
 </head>
 <body data-page-id="{{ page_id or page_customization['page_id'] }}" style="--header-primary: {{ site_settings['header_bg_color'] }}; --header-secondary: {{ site_settings['header_secondary_color'] }}; --bg: {{ site_settings['page_bg_color'] }}; --ad-bg: {{ site_settings['ad_bg_color'] }}; --ad-text: {{ site_settings['ad_text_color'] }}; --site-font: {{ site_settings['site_name_font'] }}; --ad-button: {{ site_settings['ad_button_color'] }}; --page-accent: {{ page_customization['accent_color'] }}; --page-section-bg: {{ page_customization['section_bg_color'] }}; --page-section-text: {{ page_customization['section_text_color'] }}; --page-section-button-bg: {{ page_customization['section_button_bg_color'] }}; --page-section-button-text: {{ page_customization['section_button_text_color'] }};">
+  <a href="#main-content" class="skip-link">Aller au contenu principal</a>
   <header>
     <nav>
       <div class="logo" id="site-name-logo">{{ site_settings["site_name"] }}</div>
       <div>
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Activer/désactiver le mode sombre">🌙</button>
         <a href="{{ url_for('index') }}">{{ tr("nav_market") }}</a>
         <a href="{{ url_for('experience') }}">{{ tr("nav_experience") }}</a>
         <a href="{{ url_for('policy') }}">{{ tr("nav_policy") }}</a>
@@ -38,7 +41,7 @@
     {% block hero %}{% endblock %}
   </header>
 
-  <main>
+  <main id="main-content">
     <section class="page-custom-intro align-{{ page_customization['text_align'] }}">
       <h1 id="page-custom-title">{{ page_customization['title'] }}</h1>
       <h3 id="page-custom-subtitle">{{ page_customization['subtitle'] }}</h3>
@@ -56,6 +59,30 @@
     <p><span id="footer-site-name">{{ site_settings["site_name"] }}</span> &copy; 2024 - {{ tr("footer_secure") }}</p>
   </footer>
 
+  <script>
+    (function () {
+      const key = "elit21-theme";
+      const btn = document.getElementById("theme-toggle");
+      const body = document.body;
+      if (!btn || !body) return;
+      function applyTheme(theme) {
+        if (theme === "dark") {
+          body.classList.add("theme-dark");
+          btn.textContent = "☀️";
+        } else {
+          body.classList.remove("theme-dark");
+          btn.textContent = "🌙";
+        }
+      }
+      const saved = localStorage.getItem(key) || "light";
+      applyTheme(saved);
+      btn.addEventListener("click", function () {
+        const next = body.classList.contains("theme-dark") ? "light" : "dark";
+        localStorage.setItem(key, next);
+        applyTheme(next);
+      });
+    })();
+  </script>
   <script>
     (function () {
       const apiUrl = "{{ url_for('api_site_settings') }}";

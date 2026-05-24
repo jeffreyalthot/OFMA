@@ -27,6 +27,32 @@ body {
   color: var(--primary);
 }
 
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: #111827;
+  color: #fff;
+  padding: 0.7rem 1rem;
+  border-radius: 0 0 10px 0;
+  z-index: 9999;
+}
+
+.skip-link:focus {
+  left: 0;
+}
+
+body.theme-dark {
+  --bg: #0b1220;
+  --surface: #111c32;
+  --primary: #e8f0ff;
+  --secondary: #90a8df;
+  --ad-bg: #17253f;
+  --ad-text: #e7eeff;
+  --ad-button: #375a9e;
+  --muted: #9fb0d4;
+}
+
 header {
   background: linear-gradient(120deg, var(--header-primary), var(--header-secondary));
   color: #fff;
@@ -52,6 +78,39 @@ nav a {
   margin-left: 1.5rem;
   text-decoration: none;
   font-weight: 500;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid #f9c74f;
+  outline-offset: 2px;
+}
+
+.theme-toggle {
+  margin-left: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+}
+
+.flash {
+  background: #e8fff2;
+  border: 1px solid #b9efcf;
+  color: #0f5132;
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  margin-bottom: 1rem;
+}
+
+body.theme-dark .flash {
+  background: #1f3b2c;
+  border-color: #2f5b42;
+  color: #d0f5de;
 }
 
 .hero {
@@ -125,6 +184,91 @@ main {
   margin-bottom: 1.5rem;
 }
 
+.market-toolbar {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr auto auto 1.2fr auto;
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+  align-items: center;
+  position: sticky;
+  top: 0.5rem;
+  z-index: 4;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(3px);
+  padding: 0.5rem;
+  border-radius: 12px;
+}
+
+.market-toolbar input,
+.market-toolbar select {
+  border: 1px solid #d7deeb;
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  background: #fff;
+}
+
+.market-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+
+.market-price {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.market-price input[type="range"] {
+  width: 120px;
+}
+.market-reset {
+  border: 1px solid #d7deeb;
+  background: #fff;
+  color: var(--primary);
+  border-radius: 10px;
+  padding: 0.58rem 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.favorite-btn {
+  border: 1px solid #d7deeb;
+  background: #fff;
+  color: var(--primary);
+  border-radius: 10px;
+  padding: 0.48rem 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin: 0.35rem 0 0.2rem;
+}
+
+.favorite-btn.is-favorite {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.market-results-count {
+  margin-bottom: 0.8rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.market-empty-state {
+  margin-top: 0.9rem;
+  background: #fff6f6;
+  border: 1px solid #ffd9d9;
+  color: #a94442;
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+}
+
 .market-grid {
   display: flex;
   flex-wrap: wrap;
@@ -135,8 +279,8 @@ main {
 .card {
   background: var(--ad-bg);
   color: var(--ad-text);
-  width: 3cm;
-  height: 6cm;
+  width: min(100%, 240px);
+  min-height: 370px;
   border-radius: 10px;
   box-shadow: var(--shadow);
   overflow: hidden;
@@ -145,8 +289,8 @@ main {
 }
 
 .card-image {
-  width: 3cm;
-  height: 3cm;
+  width: 100%;
+  height: 190px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -162,8 +306,7 @@ main {
 }
 
 .card-content {
-  height: 3cm;
-  padding: 0.35rem;
+  padding: 0.7rem;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -171,7 +314,7 @@ main {
 }
 
 .card-content h3 {
-  font-size: 0.72rem;
+  font-size: 1rem;
   line-height: 1.1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -180,7 +323,7 @@ main {
 
 .card-content p {
   color: var(--ad-text);
-  font-size: 0.52rem;
+  font-size: 0.83rem;
   line-height: 1.2;
   overflow: hidden;
   display: -webkit-box;
@@ -188,9 +331,31 @@ main {
   -webkit-box-orient: vertical;
 }
 
+.stock-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: #e8fff2;
+  color: #166534;
+  margin: 0.2rem 0 0.35rem;
+}
+
+.stock-badge.low {
+  background: #fff7e6;
+  color: #92400e;
+}
+
+.stock-badge.out {
+  background: #ffe8e8;
+  color: #991b1b;
+}
+
 .card-content .price {
   font-weight: 700;
-  font-size: 0.6rem;
+  font-size: 1rem;
 }
 
 .card-content .view-item-button {
@@ -204,7 +369,13 @@ main {
   color: #ffffff;
   text-decoration: none;
   font-weight: 600;
-  font-size: 0.56rem;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 860px) {
+  .market-toolbar {
+    grid-template-columns: 1fr;
+  }
 }
 
 .cart-add button {

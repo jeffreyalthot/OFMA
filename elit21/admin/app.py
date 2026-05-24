@@ -143,6 +143,12 @@ class AdminApp:
         self.shipping_button.pack(side="left", padx=(8, 0))
         self.language_button = ttk.Button(top_bar, command=self.open_language_window)
         self.language_button.pack(side="left", padx=(8, 0))
+        ttk.Button(top_bar, text="Actualiser tout", command=self.refresh_all).pack(side="right")
+        ttk.Button(top_bar, text="Exporter produits CSV", command=self.export_products_csv).pack(
+            side="right", padx=(0, 8)
+        )
+        self.root.bind("<Control-r>", lambda _event: self.refresh_all())
+        self.root.bind("<Control-f>", lambda _event: self.focus_product_search())
 
         notebook = ttk.Notebook(root)
         notebook.pack(fill="both", expand=True)
@@ -258,6 +264,11 @@ class AdminApp:
         self.product_color = StringVar()
         self.product_size = StringVar()
         self.product_category = StringVar()
+        self.product_filter_query = StringVar()
+        self.product_filter_status = StringVar(value="Tous")
+        self.product_filter_stock = StringVar(value="Tous")
+        self.products_total_count = 0
+        self.product_sort_by = StringVar(value="created_desc")
 
         ttk.Label(form_frame, text="Nom").pack(anchor="w")
         ttk.Entry(form_frame, textvariable=self.product_name, width=35).pack(anchor="w")
@@ -318,6 +329,50 @@ class AdminApp:
 
         list_frame = ttk.Labelframe(container, text="Articles", padding=15)
         list_frame.pack(side="left", fill="both", expand=True)
+        filters_frame = ttk.Frame(list_frame)
+        filters_frame.pack(fill="x", pady=(0, 8))
+        ttk.Label(filters_frame, text="Recherche").pack(side="left")
+        self.product_filter_entry = ttk.Entry(filters_frame, textvariable=self.product_filter_query, width=24)
+        self.product_filter_entry.pack(side="left", padx=(6, 8))
+        ttk.Label(filters_frame, text="Statut").pack(side="left")
+        status_filter = ttk.Combobox(
+            filters_frame,
+            textvariable=self.product_filter_status,
+            values=["Tous", "active", "pending", "inactive"],
+            state="readonly",
+            width=12,
+        )
+        status_filter.pack(side="left", padx=(6, 8))
+        ttk.Label(filters_frame, text="Stock").pack(side="left")
+        stock_filter = ttk.Combobox(
+            filters_frame,
+            textvariable=self.product_filter_stock,
+            values=["Tous", "En stock", "Stock faible (<=3)", "Rupture"],
+            state="readonly",
+            width=16,
+        )
+        stock_filter.pack(side="left", padx=(6, 8))
+        ttk.Label(filters_frame, text="Tri").pack(side="left")
+        sort_filter = ttk.Combobox(
+            filters_frame,
+            textvariable=self.product_sort_by,
+            values=["created_desc", "name_asc", "price_desc", "stock_desc"],
+            state="readonly",
+            width=14,
+        )
+        sort_filter.pack(side="left", padx=(6, 8))
+        ttk.Button(filters_frame, text="Filtrer", command=self.refresh_products).pack(side="left")
+        ttk.Button(
+            filters_frame,
+            text="Réinitialiser",
+            command=lambda: self._reset_product_filters(),
+        ).pack(side="left", padx=(6, 0))
+        self.products_count_label = ttk.Label(filters_frame, text="0 article(s)")
+        self.products_count_label.pack(side="right")
+        self.product_filter_query.trace_add("write", lambda *_args: self.refresh_products())
+        self.product_filter_status.trace_add("write", lambda *_args: self.refresh_products())
+        self.product_filter_stock.trace_add("write", lambda *_args: self.refresh_products())
+        self.product_sort_by.trace_add("write", lambda *_args: self.refresh_products())
 
         columns = ("id", "name", "status", "price", "stock")
         self.products_tree = ttk.Treeview(list_frame, columns=columns, show="headings")
@@ -326,15 +381,68 @@ class AdminApp:
             self.products_tree.column(col, width=120)
         self.products_tree.pack(side="left", fill="both", expand=True)
         self.products_tree.bind("<<TreeviewSelect>>", self.show_product_preview)
+        self.products_tree.bind("<Double-1>", self.show_product_preview)
 
         scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.products_tree.yview)
         scrollbar.pack(side="right", fill="y")
         self.products_tree.configure(yscrollcommand=scrollbar.set)
 
+        self.products_tree.tag_configure("active", background="#e8fff2")
+        self.products_tree.tag_configure("pending", background="#fff8e5")
+        self.products_tree.tag_configure("inactive", background="#ffecec")
+        self.products_tree.tag_configure("low_stock", foreground="#b45309")
+        self.products_status_summary = ttk.Label(
+            list_frame,
+            text="Actifs: 0 | En attente: 0 | Inactifs: 0",
+            foreground="#475569",
+        )
+        self.products_status_summary.pack(anchor="w", pady=(8, 0))
+
         preview_frame = ttk.Labelframe(container, text="Aperçu image", padding=15)
         preview_frame.pack(side="left", fill="y", padx=10)
         self.preview_label = Label(preview_frame, text="Aucune image")
         self.preview_label.pack()
+        ttk.Separator(preview_frame, orient="horizontal").pack(fill="x", pady=10)
+        ttk.Button(
+            preview_frame,
+            text="Activer sélection",
+            command=lambda: self.bulk_update_selected_products("active"),
+        ).pack(fill="x", pady=(0, 6))
+        ttk.Button(
+            preview_frame,
+            text="Désactiver sélection",
+            command=lambda: self.bulk_update_selected_products("inactive"),
+        ).pack(fill="x", pady=(0, 6))
+        ttk.Button(
+            preview_frame,
+            text="Mettre en attente",
+            command=lambda: self.bulk_update_selected_products("pending"),
+        ).pack(fill="x")
+        ttk.Button(
+            preview_frame,
+            text="Dupliquer sélection",
+            command=self.duplicate_selected_products,
+        ).pack(fill="x", pady=(8, 6))
+        ttk.Button(
+            preview_frame,
+            text="Supprimer sélection",
+            command=self.delete_selected_products,
+        ).pack(fill="x")
+        ttk.Separator(preview_frame, orient="horizontal").pack(fill="x", pady=10)
+        self.stock_adjust_delta = StringVar(value="1")
+        controls = ttk.Frame(preview_frame)
+        controls.pack(fill="x")
+        ttk.Label(controls, text="Ajustement stock").pack(side="left")
+        ttk.Entry(controls, textvariable=self.stock_adjust_delta, width=6).pack(side="left", padx=(6, 6))
+        ttk.Button(controls, text="+", width=3, command=lambda: self.adjust_selected_stock(True)).pack(side="left")
+        ttk.Button(controls, text="-", width=3, command=lambda: self.adjust_selected_stock(False)).pack(side="left", padx=(6, 0))
+        ttk.Label(
+            preview_frame,
+            text="Astuce: Ctrl/Cmd+clic pour multi-sélection.",
+            foreground="#6b7280",
+            wraplength=220,
+            justify="left",
+        ).pack(anchor="w", pady=(10, 0))
 
     def _build_inventory_tab(self) -> None:
         container = ttk.Frame(self.inventory_tab, padding=20)
@@ -913,11 +1021,49 @@ class AdminApp:
         for item in self.products_tree.get_children():
             self.products_tree.delete(item)
 
+        filter_query = self.product_filter_query.get().strip().lower()
+        filter_status = self.product_filter_status.get().strip().lower()
+
+        where_clauses = []
+        params: list[str] = []
+        if filter_query:
+            where_clauses.append("(LOWER(name) LIKE ? OR LOWER(category) LIKE ?)")
+            params.extend([f"%{filter_query}%", f"%{filter_query}%"])
+        if filter_status and filter_status != "tous":
+            where_clauses.append("status = ?")
+            params.append(filter_status)
+
+        filter_stock = self.product_filter_stock.get().strip().lower()
+        if filter_stock == "en stock":
+            where_clauses.append("stock > 0")
+        elif filter_stock == "stock faible (<=3)":
+            where_clauses.append("stock BETWEEN 1 AND 3")
+        elif filter_stock == "rupture":
+            where_clauses.append("stock <= 0")
+
+        query = "SELECT id, name, status, price, stock FROM products"
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
+        sort_map = {
+            "created_desc": "created_at DESC",
+            "name_asc": "name ASC",
+            "price_desc": "price DESC",
+            "stock_desc": "stock DESC",
+        }
+        query += f" ORDER BY {sort_map.get(self.product_sort_by.get(), 'created_at DESC')}"
+
         conn = get_connection()
-        products = conn.execute(
-            "SELECT id, name, status, price, stock FROM products ORDER BY created_at DESC"
+        products = conn.execute(query, params).fetchall()
+        self.products_total_count = conn.execute("SELECT COUNT(*) AS c FROM products").fetchone()["c"]
+        status_rows = conn.execute(
+            """
+            SELECT status, COUNT(*) AS c
+            FROM products
+            GROUP BY status
+            """
         ).fetchall()
         conn.close()
+        status_counts = {row["status"]: row["c"] for row in status_rows}
 
         for product in products:
             self.products_tree.insert(
@@ -930,9 +1076,169 @@ class AdminApp:
                     self.format_money(product["price"]),
                     product["stock"],
                 ),
+                tags=(
+                    product["status"],
+                    "low_stock" if int(product["stock"] or 0) <= 3 else "",
+                ),
             )
+        self.products_count_label.config(text=f"{len(products)} / {self.products_total_count} article(s)")
+        self.products_status_summary.config(
+            text=(
+                f"Actifs: {status_counts.get('active', 0)} | "
+                f"En attente: {status_counts.get('pending', 0)} | "
+                f"Inactifs: {status_counts.get('inactive', 0)}"
+            )
+        )
         self.preview_label.config(text="Aucune image", image="")
         self.preview_label.image = None
+
+    def export_products_csv(self) -> None:
+        path = filedialog.asksaveasfilename(
+            title="Exporter produits (CSV)",
+            defaultextension=".csv",
+            filetypes=[("CSV", "*.csv")],
+        )
+        if not path:
+            return
+        conn = get_connection()
+        rows = conn.execute(
+            """
+            SELECT id, name, category, status, price, stock, created_at
+            FROM products
+            ORDER BY created_at DESC
+            """
+        ).fetchall()
+        conn.close()
+        headers = ["id", "name", "category", "status", "price", "stock", "created_at"]
+        with open(path, "w", encoding="utf-8", newline="") as f:
+            f.write(",".join(headers) + "\n")
+            for row in rows:
+                values = []
+                for key in headers:
+                    value = str(row[key] if row[key] is not None else "")
+                    escaped = value.replace('"', '""')
+                    values.append(f'"{escaped}"')
+                f.write(",".join(values) + "\n")
+        messagebox.showinfo("Export", f"Export CSV réalisé: {path}")
+
+    def _reset_product_filters(self) -> None:
+        self.product_filter_query.set("")
+        self.product_filter_status.set("Tous")
+        self.product_filter_stock.set("Tous")
+        self.product_sort_by.set("created_desc")
+        self.refresh_products()
+
+    def bulk_update_selected_products(self, status: str) -> None:
+        selected = self.products_tree.selection()
+        if not selected:
+            messagebox.showwarning("Sélection requise", "Sélectionnez au moins un article.")
+            return
+        ids = [int(self.products_tree.item(item)["values"][0]) for item in selected]
+        placeholders = ",".join("?" for _ in ids)
+        conn = get_connection()
+        conn.execute(
+            f"UPDATE products SET status = ? WHERE id IN ({placeholders})",
+            [status, *ids],
+        )
+        conn.commit()
+        conn.close()
+        self.refresh_products()
+        self.refresh_inventory()
+        messagebox.showinfo("Succès", f"{len(ids)} article(s) mis à jour.")
+
+    def duplicate_selected_products(self) -> None:
+        selected = self.products_tree.selection()
+        if not selected:
+            messagebox.showwarning("Sélection requise", "Sélectionnez au moins un article.")
+            return
+        conn = get_connection()
+        cursor = conn.cursor()
+        created = 0
+        for item in selected:
+            product_id = int(self.products_tree.item(item)["values"][0])
+            product = cursor.execute(
+                "SELECT name, description, price, stock, color, size, category FROM products WHERE id = ?",
+                (product_id,),
+            ).fetchone()
+            if not product:
+                continue
+            cursor.execute(
+                """
+                INSERT INTO products (name, description, price, status, stock, color, size, category, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    f"{product['name']} (Copie)",
+                    product["description"],
+                    product["price"],
+                    "pending",
+                    product["stock"],
+                    product["color"],
+                    product["size"],
+                    product["category"],
+                    datetime.utcnow().isoformat(),
+                ),
+            )
+            created += 1
+        conn.commit()
+        conn.close()
+        self.refresh_all()
+        messagebox.showinfo("Succès", f"{created} article(s) dupliqué(s).")
+
+    def delete_selected_products(self) -> None:
+        selected = self.products_tree.selection()
+        if not selected:
+            messagebox.showwarning("Sélection requise", "Sélectionnez au moins un article.")
+            return
+        if not messagebox.askyesno(
+            "Confirmation",
+            f"Supprimer {len(selected)} article(s) ? Cette action est irréversible.",
+        ):
+            return
+        conn = get_connection()
+        cursor = conn.cursor()
+        for item in selected:
+            product_id = int(self.products_tree.item(item)["values"][0])
+            cursor.execute("DELETE FROM product_images WHERE product_id = ?", (product_id,))
+            cursor.execute("DELETE FROM inventory WHERE product_id = ?", (product_id,))
+            cursor.execute("DELETE FROM cart_items WHERE product_id = ?", (product_id,))
+            cursor.execute("DELETE FROM products WHERE id = ?", (product_id,))
+        conn.commit()
+        conn.close()
+        self.reset_product_form()
+        self.refresh_all()
+        messagebox.showinfo("Succès", "Suppression terminée.")
+
+    def adjust_selected_stock(self, increase: bool) -> None:
+        selected = self.products_tree.selection()
+        if not selected:
+            messagebox.showwarning("Sélection requise", "Sélectionnez au moins un article.")
+            return
+        try:
+            delta = int(self.stock_adjust_delta.get().strip() or "0")
+        except ValueError:
+            messagebox.showerror("Erreur", "Valeur d'ajustement invalide.")
+            return
+        if delta <= 0:
+            messagebox.showerror("Erreur", "La valeur d'ajustement doit être > 0.")
+            return
+        delta = delta if increase else -delta
+        ids = [int(self.products_tree.item(item)["values"][0]) for item in selected]
+        placeholders = ",".join("?" for _ in ids)
+        conn = get_connection()
+        conn.execute(
+            f"UPDATE products SET stock = CASE WHEN stock + ? < 0 THEN 0 ELSE stock + ? END WHERE id IN ({placeholders})",
+            [delta, delta, *ids],
+        )
+        conn.commit()
+        conn.close()
+        self.refresh_products()
+        self.refresh_inventory()
+
+    def focus_product_search(self) -> None:
+        self.notebook.select(self.products_tab)
+        if hasattr(self, "product_filter_entry"):
+            self.product_filter_entry.focus_set()
 
     def show_product_preview(self, _event=None) -> None:
         selected = self.products_tree.selection()
