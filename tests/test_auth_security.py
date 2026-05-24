@@ -44,6 +44,39 @@ class AuthSecurityTests(unittest.TestCase):
         self.assertTrue(verify_password("1234", legacy_hash))
         self.assertFalse(verify_password("wrong", legacy_hash))
 
+    def test_security_headers_present(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers.get("X-Content-Type-Options"), "nosniff")
+        self.assertEqual(response.headers.get("X-Frame-Options"), "DENY")
+        self.assertIn("default-src 'self'", response.headers.get("Content-Security-Policy", ""))
+
+    def test_login_rate_limit_blocks_after_retries(self):
+        self.client.post(
+            "/register",
+            data={
+                "email": "ratelimit@example.com",
+                "full_name": "Rate Limit User",
+                "password": "CorrectPass123!",
+            },
+            follow_redirects=False,
+        )
+        for _ in range(5):
+            response = self.client.post(
+                "/login",
+                data={"email": "ratelimit@example.com", "password": "wrong"},
+                follow_redirects=True,
+            )
+            self.assertEqual(response.status_code, 200)
+
+        blocked_response = self.client.post(
+            "/login",
+            data={"email": "ratelimit@example.com", "password": "wrong"},
+            follow_redirects=True,
+        )
+        self.assertEqual(blocked_response.status_code, 200)
+        self.assertIn("Trop de tentatives", blocked_response.get_data(as_text=True))
+
 
 if __name__ == "__main__":
     unittest.main()

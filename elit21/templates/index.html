@@ -54,9 +54,39 @@
 
 <h2 id="market" class="section-title">{{ tr("market_title") }} {{ site_settings["site_name"] }}</h2>
 {% if products %}
+  <section class="market-toolbar">
+    <input id="market-search" type="search" placeholder="Rechercher un produit..." />
+    <select id="market-category">
+      <option value="">Toutes catégories</option>
+      {% for category in products|map(attribute='category')|unique|sort %}
+      <option value="{{ category|lower }}">{{ category }}</option>
+      {% endfor %}
+    </select>
+    <select id="market-sort">
+      <option value="featured">Tri: recommandé</option>
+      <option value="price-asc">Prix croissant</option>
+      <option value="price-desc">Prix décroissant</option>
+      <option value="name-asc">Nom A→Z</option>
+    </select>
+    <label class="market-toggle">
+      <input id="market-instock-only" type="checkbox" />
+      En stock uniquement
+    </label>
+    <label class="market-toggle">
+      <input id="market-favorites-only" type="checkbox" />
+      Favoris uniquement
+    </label>
+    <label class="market-price" for="market-price-max">
+      Prix max
+      <input id="market-price-max" type="range" min="0" max="1000" value="1000" step="5" />
+      <span id="market-price-max-value">1000</span>
+    </label>
+    <button id="market-reset" type="button" class="market-reset">Réinitialiser</button>
+  </section>
+  <p id="market-results-count" class="market-results-count"></p>
   <div class="market-grid">
     {% for product in products %}
-      <div class="card">
+      <div class="card" data-product-id="{{ product['id'] }}" data-name="{{ product['name']|lower }}" data-category="{{ product['category']|lower }}" data-price="{{ product['price'] }}" data-stock="{{ product['stock'] }}">
         <div class="card-image">
           {% if product['first_image_id'] %}
             <img src="{{ url_for('product_image', product_id=product['id'], image_id=product['first_image_id']) }}" alt="{{ product['name'] }}" />
@@ -66,13 +96,109 @@
         </div>
         <div class="card-content">
           <h3>{{ product['name'] }}</h3>
+          <span class="stock-badge {% if product['stock']|int <= 0 %}out{% elif product['stock']|int <= 3 %}low{% endif %}">
+            {% if product['stock']|int <= 0 %}Rupture{% elif product['stock']|int <= 3 %}Stock faible{% else %}En stock{% endif %}
+          </span>
           <p>{{ product['description'][:120] }}{% if product['description']|length > 120 %}...{% endif %}</p>
           <div class="price">{{ format_money(product['price']) }}</div>
+          <button type="button" class="favorite-btn" data-favorite-id="{{ product['id'] }}">☆ Ajouter aux favoris</button>
           <a class="view-item-button" href="{{ url_for('product_detail', product_id=product['id']) }}">{{ tr("view_item") }}</a>
         </div>
       </div>
     {% endfor %}
   </div>
+  <p id="market-empty-state" class="market-empty-state" hidden>Aucun produit ne correspond à votre recherche.</p>
+  <script>
+    (function () {
+      const searchInput = document.getElementById('market-search');
+      const categorySelect = document.getElementById('market-category');
+      const sortSelect = document.getElementById('market-sort');
+      const inStockOnly = document.getElementById('market-instock-only');
+      const favoritesOnly = document.getElementById('market-favorites-only');
+      const priceMax = document.getElementById('market-price-max');
+      const priceMaxValue = document.getElementById('market-price-max-value');
+      const resetBtn = document.getElementById('market-reset');
+      const grid = document.querySelector('.market-grid');
+      const cards = Array.from(grid.querySelectorAll('.card'));
+      const favoriteButtons = Array.from(grid.querySelectorAll('.favorite-btn'));
+      const resultsCount = document.getElementById('market-results-count');
+      const emptyState = document.getElementById('market-empty-state');
+      const favoritesStorageKey = 'elit21-favorites';
+      const favorites = new Set(JSON.parse(localStorage.getItem(favoritesStorageKey) || '[]').map(String));
+      const maxCatalogPrice = Math.max(0, ...cards.map((card) => Number(card.dataset.price || 0)));
+      const roundedMaxPrice = Math.max(10, Math.ceil(maxCatalogPrice / 10) * 10);
+      priceMax.max = String(roundedMaxPrice);
+      priceMax.value = String(roundedMaxPrice);
+      priceMaxValue.textContent = String(roundedMaxPrice);
+
+      function syncFavoriteButtons() {
+        favoriteButtons.forEach((btn) => {
+          const id = String(btn.dataset.favoriteId || '');
+          const isFavorite = favorites.has(id);
+          btn.classList.toggle('is-favorite', isFavorite);
+          btn.textContent = isFavorite ? '★ Retirer des favoris' : '☆ Ajouter aux favoris';
+        });
+      }
+
+      function applyMarketFilters() {
+        const q = (searchInput.value || '').trim().toLowerCase();
+        const c = (categorySelect.value || '').trim().toLowerCase();
+        const stockOnly = !!inStockOnly.checked;
+        const favOnly = !!favoritesOnly.checked;
+        const maxPrice = Number(priceMax.value || 0);
+        let visible = cards.filter((card) => {
+          const name = card.dataset.name || '';
+          const category = card.dataset.category || '';
+          const stock = Number(card.dataset.stock || 0);
+          const id = String(card.dataset.productId || '');
+          const price = Number(card.dataset.price || 0);
+          return (!q || name.includes(q)) && (!c || category === c) && (!stockOnly || stock > 0) && (!favOnly || favorites.has(id)) && price <= maxPrice;
+        });
+        const sorter = sortSelect.value;
+        visible.sort((a, b) => {
+          if (sorter === 'price-asc') return Number(a.dataset.price) - Number(b.dataset.price);
+          if (sorter === 'price-desc') return Number(b.dataset.price) - Number(a.dataset.price);
+          if (sorter === 'name-asc') return (a.dataset.name || '').localeCompare(b.dataset.name || '');
+          return 0;
+        });
+        cards.forEach((card) => { card.style.display = 'none'; });
+        visible.forEach((card) => {
+          card.style.display = '';
+          grid.appendChild(card);
+        });
+        resultsCount.textContent = `${visible.length} produit(s) affiché(s) · Prix max: ${maxPrice}`;
+        emptyState.hidden = visible.length > 0;
+      }
+
+      [searchInput, categorySelect, sortSelect, inStockOnly, favoritesOnly, priceMax].forEach((el) => el.addEventListener('input', applyMarketFilters));
+      priceMax.addEventListener('input', function () {
+        priceMaxValue.textContent = String(priceMax.value);
+      });
+      favoriteButtons.forEach((btn) => {
+        btn.addEventListener('click', function () {
+          const id = String(btn.dataset.favoriteId || '');
+          if (!id) return;
+          if (favorites.has(id)) favorites.delete(id);
+          else favorites.add(id);
+          localStorage.setItem(favoritesStorageKey, JSON.stringify(Array.from(favorites)));
+          syncFavoriteButtons();
+          applyMarketFilters();
+        });
+      });
+      resetBtn.addEventListener('click', function () {
+        searchInput.value = '';
+        categorySelect.value = '';
+        sortSelect.value = 'featured';
+        inStockOnly.checked = false;
+        favoritesOnly.checked = false;
+        priceMax.value = String(roundedMaxPrice);
+        priceMaxValue.textContent = String(roundedMaxPrice);
+        applyMarketFilters();
+      });
+      syncFavoriteButtons();
+      applyMarketFilters();
+    })();
+  </script>
 {% else %}
   <p>{{ tr("no_items") }}</p>
 {% endif %}

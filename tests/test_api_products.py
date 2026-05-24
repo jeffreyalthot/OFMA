@@ -80,6 +80,15 @@ class ApiProductsTests(unittest.TestCase):
         response = self.client.get("/cart")
         self.assertEqual(response.status_code, 200)
 
+    def test_robots_and_sitemap_available(self):
+        robots_response = self.client.get("/robots.txt")
+        self.assertEqual(robots_response.status_code, 200)
+        self.assertIn("Sitemap:", robots_response.get_data(as_text=True))
+
+        sitemap_response = self.client.get("/sitemap.xml")
+        self.assertEqual(sitemap_response.status_code, 200)
+        self.assertIn("<urlset", sitemap_response.get_data(as_text=True))
+
 
 if __name__ == "__main__":
     unittest.main()
