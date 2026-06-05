@@ -4,6 +4,7 @@
 <div class="auth-container">
   <h2>{{ tr("register") }}</h2>
   <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
     <input type="text" name="full_name" placeholder="{{ tr('full_name') }}" required />
     <input type="email" name="email" placeholder="{{ tr('email') }}" required />
     <input type="password" name="password" placeholder="{{ tr('password') }}" required />

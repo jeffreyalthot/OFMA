@@ -26,6 +26,7 @@ except ImportError:  # pragma: no cover - optional dependency
 
 from elit21.db import (
     CURRENCY_OPTIONS,
+    decimal_to_cents,
     DEFAULT_SITE_SETTINGS,
     PAGE_CUSTOMIZATION_KEYS,
     get_connection,
@@ -33,7 +34,7 @@ from elit21.db import (
     init_db,
 )
 from elit21.i18n import SUPPORTED_LANGUAGES, admin_tr, normalize_language
-from elit21.services.media_service import resolve_image_path, save_product_image
+from elit21.services.media_service import InvalidImageUpload, resolve_image_path, save_product_image
 
 
 MAX_IMAGES = 8
@@ -720,13 +721,14 @@ class AdminApp:
         if self.editing_product_id is None:
             cursor.execute(
                 """
-                INSERT INTO products (name, description, price, status, stock, color, size, category, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO products (name, description, price, price_cents, status, stock, color, size, category, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     name,
                     description,
                     price_value,
+                    decimal_to_cents(price_value),
                     status,
                     stock_value,
                     color or None,
@@ -741,13 +743,14 @@ class AdminApp:
             cursor.execute(
                 """
                 UPDATE products
-                SET name = ?, description = ?, price = ?, status = ?, stock = ?, color = ?, size = ?, category = ?
+                SET name = ?, description = ?, price = ?, price_cents = ?, status = ?, stock = ?, color = ?, size = ?, category = ?
                 WHERE id = ?
                 """,
                 (
                     name,
                     description,
                     price_value,
+                    decimal_to_cents(price_value),
                     status,
                     stock_value,
                     color or None,
@@ -760,13 +763,19 @@ class AdminApp:
         if self.selected_images:
             cursor.execute("DELETE FROM product_images WHERE product_id = ?", (product_id,))
             for idx, (data, mime_type, original_path) in enumerate(self.selected_images):
-                image_path = save_product_image(
-                    product_id=product_id,
-                    index=idx,
-                    content=data,
-                    mime_type=mime_type,
-                    original_path=original_path,
-                )
+                try:
+                    image_path = save_product_image(
+                        product_id=product_id,
+                        index=idx,
+                        content=data,
+                        mime_type=mime_type,
+                        original_path=original_path,
+                    )
+                except InvalidImageUpload as exc:
+                    conn.rollback()
+                    conn.close()
+                    messagebox.showerror("Image refusée", str(exc))
+                    return
                 cursor.execute(
                     """
                     INSERT INTO product_images (product_id, image_blob, image_path, mime_type, position)
@@ -1165,8 +1174,8 @@ class AdminApp:
                 continue
             cursor.execute(
                 """
-                INSERT INTO products (name, description, price, status, stock, color, size, category, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO products (name, description, price, price_cents, status, stock, color, size, category, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     f"{product['name']} (Copie)",
@@ -2419,7 +2428,7 @@ class AdminApp:
 
 def main():
     root = Tk()
-    app = AdminApp(root)
+    AdminApp(root)
     root.mainloop()
 
 

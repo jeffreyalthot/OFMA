@@ -40,10 +40,17 @@ class ConfigAndDbTests(unittest.TestCase):
         self.assertIn("capture_id", order_columns)
         self.assertIn("archived", product_columns)
         self.assertIn("deleted_at", product_columns)
-        self.assertTrue({"0001", "0002", "0003", "0004"}.issubset(migrations))
+        self.assertIn("price_cents", product_columns)
+        self.assertIn("total_cents", order_columns)
+        self.assertTrue({"0001", "0002", "0003", "0004", "0005"}.issubset(migrations))
         self.assertIn("idx_orders_paypal_order_id", indexes)
         self.assertIn("idx_orders_capture_id", indexes)
 
 
 if __name__ == "__main__":
     unittest.main()
+
+class MoneyMigrationTests(unittest.TestCase):
+    def test_decimal_to_cents_rounds_reliably(self):
+        self.assertEqual(db.decimal_to_cents("9.99"), 999)
+        self.assertEqual(db.decimal_to_cents("10.005"), 1001)

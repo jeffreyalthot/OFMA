@@ -1,5 +1,6 @@
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent / "elit21.db"
@@ -37,6 +38,8 @@ DEFAULT_SITE_SETTINGS = {
     "ad_button_color": "#1f3a7a",
     "currency_code": "CAD",
     "shipping_fee": "9.99",
+    "shipping_fee_cents": "999",
+    "pending_order_expiration_minutes": "30",
     "language_code": "fr",
 }
 
@@ -84,6 +87,24 @@ def add_column_if_missing(
         cursor.execute(
             f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}"
         )
+
+
+def decimal_to_cents(value: object) -> int:
+    """Convert a decimal-like money amount to whole cents."""
+    try:
+        amount = Decimal(str(value or "0"))
+    except (InvalidOperation, ValueError):
+        amount = Decimal("0")
+    return int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def cents_to_decimal_text(cents: int | str | None) -> str:
+    """Return a display-safe decimal string from integer cents."""
+    try:
+        normalized_cents = int(cents or 0)
+    except (TypeError, ValueError):
+        normalized_cents = 0
+    return f"{Decimal(normalized_cents) / Decimal(100):.2f}"
 
 
 def record_schema_migration(cursor: sqlite3.Cursor, version: str, description: str) -> None:
@@ -216,6 +237,7 @@ def init_db():
             name TEXT NOT NULL,
             description TEXT NOT NULL,
             price REAL NOT NULL CHECK (price >= 0),
+            price_cents INTEGER NOT NULL DEFAULT 0 CHECK (price_cents >= 0),
             status TEXT NOT NULL CHECK (status IN ('pending', 'active', 'inactive', 'archived')),
             stock INTEGER NOT NULL CHECK (stock >= 0),
             color TEXT,
@@ -260,7 +282,11 @@ def init_db():
             paypal_order_id TEXT UNIQUE,
             capture_id TEXT UNIQUE,
             shipping_fee REAL NOT NULL DEFAULT 0 CHECK (shipping_fee >= 0),
+            shipping_fee_cents INTEGER NOT NULL DEFAULT 0 CHECK (shipping_fee_cents >= 0),
+            subtotal_cents INTEGER NOT NULL DEFAULT 0 CHECK (subtotal_cents >= 0),
+            tax_cents INTEGER NOT NULL DEFAULT 0 CHECK (tax_cents >= 0),
             total REAL NOT NULL CHECK (total >= 0),
+            total_cents INTEGER NOT NULL DEFAULT 0 CHECK (total_cents >= 0),
             created_at TEXT NOT NULL
         )
         """
@@ -269,12 +295,17 @@ def init_db():
     add_column_if_missing(cursor, "orders", "shipping_fee", "REAL NOT NULL DEFAULT 0")
     add_column_if_missing(cursor, "orders", "paypal_order_id", "TEXT")
     add_column_if_missing(cursor, "orders", "capture_id", "TEXT")
+    add_column_if_missing(cursor, "orders", "shipping_fee_cents", "INTEGER NOT NULL DEFAULT 0")
+    add_column_if_missing(cursor, "orders", "subtotal_cents", "INTEGER NOT NULL DEFAULT 0")
+    add_column_if_missing(cursor, "orders", "tax_cents", "INTEGER NOT NULL DEFAULT 0")
+    add_column_if_missing(cursor, "orders", "total_cents", "INTEGER NOT NULL DEFAULT 0")
     record_schema_migration(cursor, "0002", "Add PayPal idempotency columns to orders")
 
     for column_name in ("color", "size", "category"):
         add_column_if_missing(cursor, "products", column_name, "TEXT")
     add_column_if_missing(cursor, "products", "archived", "INTEGER NOT NULL DEFAULT 0")
     add_column_if_missing(cursor, "products", "deleted_at", "TEXT")
+    add_column_if_missing(cursor, "products", "price_cents", "INTEGER NOT NULL DEFAULT 0")
     record_schema_migration(cursor, "0003", "Add product archival fields")
 
     cursor.execute(
@@ -288,6 +319,8 @@ def init_db():
             size TEXT,
             quantity INTEGER NOT NULL CHECK (quantity > 0),
             price REAL NOT NULL CHECK (price >= 0),
+            price_cents INTEGER NOT NULL DEFAULT 0 CHECK (price_cents >= 0),
+            line_total_cents INTEGER NOT NULL DEFAULT 0 CHECK (line_total_cents >= 0),
             FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE
         )
         """
@@ -314,6 +347,9 @@ def init_db():
             order_id INTEGER NOT NULL,
             completed_at TEXT NOT NULL,
             total REAL NOT NULL CHECK (total >= 0),
+            transaction_total_cents INTEGER NOT NULL DEFAULT 0 CHECK (transaction_total_cents >= 0),
+            capture_id TEXT UNIQUE,
+            paypal_order_id TEXT,
             FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE
         )
         """
@@ -330,6 +366,8 @@ def init_db():
             status TEXT NOT NULL,
             error_message TEXT,
             retries INTEGER NOT NULL DEFAULT 0,
+            attempt_key TEXT,
+            final_status TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE SET NULL
         )
@@ -338,7 +376,24 @@ def init_db():
 
     for column_name in ("color", "size"):
         add_column_if_missing(cursor, "order_items", column_name, "TEXT")
+    add_column_if_missing(cursor, "order_items", "price_cents", "INTEGER NOT NULL DEFAULT 0")
+    add_column_if_missing(cursor, "order_items", "line_total_cents", "INTEGER NOT NULL DEFAULT 0")
+    add_column_if_missing(cursor, "transactions", "transaction_total_cents", "INTEGER NOT NULL DEFAULT 0")
+    add_column_if_missing(cursor, "transactions", "capture_id", "TEXT")
+    add_column_if_missing(cursor, "transactions", "paypal_order_id", "TEXT")
+    add_column_if_missing(cursor, "payment_logs", "attempt_key", "TEXT")
+    add_column_if_missing(cursor, "payment_logs", "final_status", "TEXT")
 
+    cursor.execute("UPDATE products SET price_cents = CAST(ROUND(price * 100) AS INTEGER) WHERE price_cents = 0 AND price > 0")
+    cursor.execute("UPDATE orders SET shipping_fee_cents = CAST(ROUND(shipping_fee * 100) AS INTEGER) WHERE shipping_fee_cents = 0 AND shipping_fee > 0")
+    cursor.execute("UPDATE orders SET total_cents = CAST(ROUND(total * 100) AS INTEGER) WHERE total_cents = 0 AND total > 0")
+    cursor.execute("UPDATE order_items SET price_cents = CAST(ROUND(price * 100) AS INTEGER) WHERE price_cents = 0 AND price > 0")
+    cursor.execute("UPDATE order_items SET line_total_cents = price_cents * quantity WHERE line_total_cents = 0 AND price_cents > 0")
+    cursor.execute("UPDATE transactions SET transaction_total_cents = CAST(ROUND(total * 100) AS INTEGER) WHERE transaction_total_cents = 0 AND total > 0")
+    record_schema_migration(cursor, "0005", "Add integer-cent money columns and backfill from legacy REAL values")
+
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_status_archived ON products(status, archived)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_category_status_archived ON products(category, status, archived)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_status ON products(status)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_category ON products(category)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_created_at ON products(created_at)")
@@ -353,11 +408,36 @@ def init_db():
     cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_capture_id ON orders(capture_id) WHERE capture_id IS NOT NULL")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_transactions_order_id ON transactions(order_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_payment_logs_order_event ON payment_logs(order_id, event)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_payment_logs_created_at ON payment_logs(created_at)")
     record_schema_migration(cursor, "0004", "Add storefront lookup and payment indexes")
+
+    expire_pending_orders(cursor)
 
     conn.commit()
     conn.close()
     UPLOADS_PATH.mkdir(parents=True, exist_ok=True)
+
+
+def expire_pending_orders(cursor: sqlite3.Cursor, *, now: datetime | None = None) -> None:
+    """Mark abandoned pending orders as expired after the configured delay."""
+    settings_row = cursor.execute(
+        "SELECT pending_order_expiration_minutes FROM site_settings WHERE id = 1"
+    ).fetchone()
+    try:
+        minutes = int(settings_row[0]) if settings_row and settings_row[0] is not None else 30
+    except (TypeError, ValueError):
+        minutes = 30
+    threshold = (now or datetime.utcnow()) - timedelta(minutes=max(minutes, 1))
+    cursor.execute(
+        """
+        UPDATE orders
+        SET status = 'expired', payment_status = 'expired'
+        WHERE status IN ('pending', 'pending_payment')
+          AND payment_status NOT LIKE 'paid:%'
+          AND created_at < ?
+        """,
+        (threshold.isoformat(),),
+    )
 
 
 def get_site_settings() -> dict[str, str]:

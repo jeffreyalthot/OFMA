@@ -80,3 +80,25 @@ class AuthSecurityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class CsrfProtectionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmpdir = tempfile.mkdtemp(prefix="ofma-csrf-")
+        db.DB_PATH = Path(self._tmpdir) / "test.db"
+        db.UPLOADS_PATH = Path(self._tmpdir) / "uploads"
+        self.app = create_app()
+        self.client = self.app.test_client()
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
+    def test_login_rejects_bad_csrf_after_form_token_issued(self):
+        self.client.get("/login")
+        response = self.client.post(
+            "/login",
+            data={"email": "csrf@example.com", "password": "wrong", "csrf_token": "bad"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+        with self.client.session_transaction() as sess:
+            self.assertIn("csrf_token", sess)

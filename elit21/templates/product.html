@@ -34,6 +34,7 @@
     </div>
     <p class="badge">{{ tr("paypal_secure_badge") }}</p>
     <form id="add-to-cart" class="cart-add" method="post" action="{{ url_for('add_to_cart', product_id=product['id']) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
       <button type="submit">{{ tr("add_to_cart") }}</button>
     </form>
     <button class="text-button" type="button" onclick="history.back()">{{ tr("back") }}</button>
