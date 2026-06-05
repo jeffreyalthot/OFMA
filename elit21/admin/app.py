@@ -309,7 +309,7 @@ class AdminApp:
         ttk.Combobox(
             form_frame,
             textvariable=self.product_status,
-            values=["pending", "active", "inactive"],
+            values=["pending", "active", "inactive", "archived"],
             state="readonly",
             width=18,
         ).pack(anchor="w")
@@ -338,7 +338,7 @@ class AdminApp:
         status_filter = ttk.Combobox(
             filters_frame,
             textvariable=self.product_filter_status,
-            values=["Tous", "active", "pending", "inactive"],
+            values=["Tous", "active", "pending", "inactive", "archived"],
             state="readonly",
             width=12,
         )
@@ -390,6 +390,7 @@ class AdminApp:
         self.products_tree.tag_configure("active", background="#e8fff2")
         self.products_tree.tag_configure("pending", background="#fff8e5")
         self.products_tree.tag_configure("inactive", background="#ffecec")
+        self.products_tree.tag_configure("archived", background="#eef0f4")
         self.products_tree.tag_configure("low_stock", foreground="#b45309")
         self.products_status_summary = ttk.Label(
             list_frame,
@@ -1192,22 +1193,49 @@ class AdminApp:
             return
         if not messagebox.askyesno(
             "Confirmation",
-            f"Supprimer {len(selected)} article(s) ? Cette action est irréversible.",
+            (
+                f"Supprimer {len(selected)} article(s) ? Les produits déjà liés "
+                "à une commande seront archivés pour préserver l'historique."
+            ),
         ):
             return
         conn = get_connection()
         cursor = conn.cursor()
+        deleted_count = 0
+        archived_count = 0
         for item in selected:
             product_id = int(self.products_tree.item(item)["values"][0])
-            cursor.execute("DELETE FROM product_images WHERE product_id = ?", (product_id,))
-            cursor.execute("DELETE FROM inventory WHERE product_id = ?", (product_id,))
-            cursor.execute("DELETE FROM cart_items WHERE product_id = ?", (product_id,))
-            cursor.execute("DELETE FROM products WHERE id = ?", (product_id,))
+            order_usage = cursor.execute(
+                "SELECT COUNT(*) AS count FROM order_items WHERE product_id = ?",
+                (product_id,),
+            ).fetchone()["count"]
+            if order_usage:
+                cursor.execute(
+                    """
+                    UPDATE products
+                    SET status = ?, archived = 1, deleted_at = ?, stock = 0
+                    WHERE id = ?
+                    """,
+                    ("archived", datetime.utcnow().isoformat(), product_id),
+                )
+                cursor.execute(
+                    "UPDATE product_inventory SET quantity = 0 WHERE product_id = ?",
+                    (product_id,),
+                )
+                archived_count += 1
+            else:
+                cursor.execute("DELETE FROM product_images WHERE product_id = ?", (product_id,))
+                cursor.execute("DELETE FROM product_inventory WHERE product_id = ?", (product_id,))
+                cursor.execute("DELETE FROM products WHERE id = ?", (product_id,))
+                deleted_count += 1
         conn.commit()
         conn.close()
         self.reset_product_form()
         self.refresh_all()
-        messagebox.showinfo("Succès", "Suppression terminée.")
+        messagebox.showinfo(
+            "Succès",
+            f"{deleted_count} article(s) supprimé(s), {archived_count} article(s) archivé(s).",
+        )
 
     def adjust_selected_stock(self, increase: bool) -> None:
         selected = self.products_tree.selection()

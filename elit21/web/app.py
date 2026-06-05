@@ -26,6 +26,7 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from elit21.config import load_app_config
 from elit21.db import CURRENCY_OPTIONS, get_connection, get_site_settings, init_db
 from elit21.i18n import normalize_language, tr
 from elit21.services.media_service import resolve_image_path
@@ -115,11 +116,13 @@ def create_app():
         static_folder=str(os.path.join(os.path.dirname(__file__), "..", "assets")),
         template_folder=str(os.path.join(os.path.dirname(__file__), "..", "templates")),
     )
-    app.secret_key = os.getenv("ELIT21_SECRET", "elit21-secret")
+    app_config = load_app_config()
+    app.secret_key = app_config.secret_key
     app.logger.setLevel(logging.DEBUG if paypal_debug_enabled() else logging.INFO)
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=app_config.session_cookie_secure,
     )
 
     login_attempts: dict[str, list[datetime]] = {}
@@ -133,6 +136,9 @@ def create_app():
     @app.before_request
     def enforce_https_and_sensitive_rate_limit():
         if not request.is_secure and request.headers.get("X-Forwarded-Proto", "http") != "https":
+            if app_config.force_https:
+                url = request.url.replace("http://", "https://", 1)
+                return redirect(url, code=308)
             if request.endpoint in blocked_endpoints:
                 return jsonify({"error": "HTTPS requis pour cette action."}), 400
 
@@ -151,6 +157,8 @@ def create_app():
             "connect-src 'self' https://www.paypal.com https://www.sandbox.paypal.com; "
             "base-uri 'self'; form-action 'self'; frame-ancestors 'none';"
         )
+        if app_config.hsts_enabled:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
     init_db()
@@ -500,8 +508,8 @@ def create_app():
         placeholders = ",".join("?" for _ in product_ids)
         conn = get_connection()
         products = conn.execute(
-            f"SELECT * FROM products WHERE id IN ({placeholders})",
-            product_ids,
+            f"SELECT * FROM products WHERE id IN ({placeholders}) AND status = ? AND archived = 0",
+            [*product_ids, "active"],
         ).fetchall()
         conn.close()
         items = []
@@ -555,7 +563,7 @@ def create_app():
                 ORDER BY position LIMIT 1
             ) AS first_image_id
             FROM products p
-            WHERE p.status = ?
+            WHERE p.status = ? AND p.archived = 0
         """
         parameters: list[object] = ["active"]
         if category:
@@ -685,7 +693,7 @@ def create_app():
                 ORDER BY position LIMIT 1
             ) AS first_image_id
             FROM products p
-            WHERE p.id = ? AND p.status = ?
+            WHERE p.id = ? AND p.status = ? AND p.archived = 0
             """,
             (product_id, "active"),
         ).fetchone()
@@ -837,7 +845,7 @@ def create_app():
         color = request.form.get("color", "").strip()
         size = request.form.get("size", "").strip()
         conn = get_connection()
-        product = conn.execute("SELECT id, status FROM products WHERE id = ?", (product_id,)).fetchone()
+        product = conn.execute("SELECT id, status, archived FROM products WHERE id = ?", (product_id,)).fetchone()
         inventory_row = conn.execute(
             """
             SELECT quantity
@@ -847,7 +855,7 @@ def create_app():
             (product_id, color, size),
         ).fetchone()
         conn.close()
-        if not product or product["status"] != "active":
+        if not product or product["status"] != "active" or product["archived"]:
             flash(t("product_unavailable"))
             return redirect(url_for("index"))
         if not color or not size:
@@ -1197,8 +1205,8 @@ def create_app():
             )
             return jsonify({"error": t("invalid_paypal_response")}), 502
         cursor.execute(
-            "UPDATE orders SET payment_status = ? WHERE id = ?",
-            (f"paypal_order:{paypal_order_id}", order_id),
+            "UPDATE orders SET payment_status = ?, paypal_order_id = ? WHERE id = ?",
+            (f"paypal_order:{paypal_order_id}", paypal_order_id, order_id),
         )
         conn.commit()
         conn.close()
@@ -1253,11 +1261,11 @@ def create_app():
                 """
                 SELECT *
                 FROM orders
-                WHERE payment_status = ? AND customer_email = ?
+                WHERE (paypal_order_id = ? OR payment_status = ?) AND customer_email = ?
                 ORDER BY id DESC
                 LIMIT 1
                 """,
-                (f"paypal_order:{paypal_order_id}", current_user["email"]),
+                (paypal_order_id, f"paypal_order:{paypal_order_id}", current_user["email"]),
             ).fetchone()
         if not order:
             conn.close()
@@ -1280,7 +1288,15 @@ def create_app():
                 "ok": True,
                 "redirect_url": url_for("checkout_success", order_id=order["id"]),
             }, 200
-        if f"paypal_order:{paypal_order_id}" != order["payment_status"]:
+        expected_payment_status = f"paypal_order:{paypal_order_id}"
+        if order["paypal_order_id"] and order["paypal_order_id"] != paypal_order_id:
+            conn.close()
+            app.logger.warning(
+                "[paypal-debug] capture_order rejected: paypal id mismatch local_order_id=%s",
+                order["id"],
+            )
+            return {"error": t("paypal_order_mismatch")}, 409
+        if not order["paypal_order_id"] and expected_payment_status != order["payment_status"]:
             conn.close()
             app.logger.warning(
                 "[paypal-debug] capture_order rejected: payment status mismatch local_order_id=%s status=%s",
@@ -1368,59 +1384,116 @@ def create_app():
                 capture_amount,
             )
             return {"error": "Montant PayPal incohérent."}, 409
-        order_items = conn.execute(
-            "SELECT * FROM order_items WHERE order_id = ?",
-            (local_order_id,),
-        ).fetchall()
-        for item in order_items:
-            inventory = conn.execute(
-                """
-                SELECT id, quantity
-                FROM product_inventory
-                WHERE product_id = ? AND color = ? AND size = ?
-                """,
-                (item["product_id"], item["color"], item["size"]),
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            order = conn.execute(
+                "SELECT * FROM orders WHERE id = ?",
+                (local_order_id,),
             ).fetchone()
-            if not inventory or inventory["quantity"] < item["quantity"]:
+            if not order:
+                conn.rollback()
                 conn.close()
-                app.logger.warning(
-                    "[paypal-debug] capture_order rejected: stock issue post-capture local_order_id=%s product_id=%s",
+                return {"error": t("order_not_found")}, 404
+            if str(order["payment_status"]).startswith("paid:"):
+                conn.rollback()
+                conn.close()
+                app.logger.info(
+                    "[paypal-debug] capture_order idempotent after paypal local_order_id=%s",
                     local_order_id,
-                    item["product_id"],
                 )
-                return {"error": t("insufficient_stock_after_payment")}, 409
-        cursor = conn.cursor()
-        for item in order_items:
-            inventory = conn.execute(
-                "SELECT id, quantity FROM product_inventory WHERE product_id = ? AND color = ? AND size = ?",
-                (item["product_id"], item["color"], item["size"]),
-            ).fetchone()
+                return {
+                    "ok": True,
+                    "redirect_url": url_for("checkout_success", order_id=local_order_id),
+                }, 200
+            if order["capture_id"] and capture_id and order["capture_id"] != capture_id:
+                conn.rollback()
+                conn.close()
+                return {"error": "Cette commande est déjà associée à une autre capture PayPal."}, 409
+
+            order_items = conn.execute(
+                "SELECT * FROM order_items WHERE order_id = ?",
+                (local_order_id,),
+            ).fetchall()
+            cursor = conn.cursor()
+            for item in order_items:
+                inventory = conn.execute(
+                    """
+                    SELECT id
+                    FROM product_inventory
+                    WHERE product_id = ? AND color = ? AND size = ?
+                    """,
+                    (item["product_id"], item["color"], item["size"]),
+                ).fetchone()
+                if not inventory:
+                    conn.rollback()
+                    conn.close()
+                    app.logger.warning(
+                        "[paypal-debug] capture_order rejected: missing stock row local_order_id=%s product_id=%s",
+                        local_order_id,
+                        item["product_id"],
+                    )
+                    return {"error": t("insufficient_stock_after_payment")}, 409
+                cursor.execute(
+                    """
+                    UPDATE product_inventory
+                    SET quantity = quantity - ?
+                    WHERE id = ? AND quantity >= ?
+                    """,
+                    (item["quantity"], inventory["id"], item["quantity"]),
+                )
+                if cursor.rowcount != 1:
+                    conn.rollback()
+                    conn.close()
+                    app.logger.warning(
+                        "[paypal-debug] capture_order rejected: concurrent stock issue local_order_id=%s product_id=%s",
+                        local_order_id,
+                        item["product_id"],
+                    )
+                    return {"error": t("insufficient_stock_after_payment")}, 409
+                total_stock = conn.execute(
+                    "SELECT COALESCE(SUM(quantity), 0) AS total FROM product_inventory WHERE product_id = ?",
+                    (item["product_id"],),
+                ).fetchone()["total"]
+                cursor.execute(
+                    "UPDATE products SET stock = ? WHERE id = ?",
+                    (total_stock, item["product_id"]),
+                )
             cursor.execute(
-                "UPDATE product_inventory SET quantity = ? WHERE id = ?",
-                (inventory["quantity"] - item["quantity"], inventory["id"]),
+                """
+                UPDATE orders
+                SET status = ?, payment_status = ?, paypal_order_id = COALESCE(paypal_order_id, ?), capture_id = COALESCE(capture_id, ?)
+                WHERE id = ? AND payment_status NOT LIKE 'paid:%'
+                """,
+                (
+                    "confirmed",
+                    f"paid:{capture_id or paypal_order_id}",
+                    paypal_order_id,
+                    capture_id,
+                    local_order_id,
+                ),
             )
-            total_stock = conn.execute(
-                "SELECT COALESCE(SUM(quantity), 0) AS total FROM product_inventory WHERE product_id = ?",
-                (item["product_id"],),
-            ).fetchone()["total"]
+            if cursor.rowcount != 1:
+                conn.rollback()
+                conn.close()
+                return {
+                    "ok": True,
+                    "redirect_url": url_for("checkout_success", order_id=local_order_id),
+                }, 200
             cursor.execute(
-                "UPDATE products SET stock = ? WHERE id = ?",
-                (total_stock, item["product_id"]),
+                "INSERT INTO transactions (order_id, completed_at, total) VALUES (?, ?, ?)",
+                (local_order_id, datetime.utcnow().isoformat(), order["total"]),
             )
-        cursor.execute(
-            """
-            UPDATE orders
-            SET status = ?, payment_status = ?
-            WHERE id = ?
-            """,
-            ("confirmed", f"paid:{capture_id or paypal_order_id}", local_order_id),
-        )
-        cursor.execute(
-            "INSERT INTO transactions (order_id, completed_at, total) VALUES (?, ?, ?)",
-            (local_order_id, datetime.utcnow().isoformat(), order["total"]),
-        )
-        conn.commit()
-        conn.close()
+            conn.commit()
+            conn.close()
+        except Exception:
+            conn.rollback()
+            conn.close()
+            app.logger.exception(
+                "[paypal-debug] capture_order transaction failed local_order_id=%s paypal_order_id=%s",
+                local_order_id,
+                paypal_order_id,
+            )
+            return {"error": "Erreur transactionnelle pendant la confirmation PayPal."}, 500
         log_payment_event(
             event="capture_paypal_order",
             status="success",
