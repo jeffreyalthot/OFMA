@@ -9,6 +9,7 @@
       {{ page_customization['section_body'] or tr("complete_shipping_info") }}
     </p>
     <form id="checkout-form" class="order-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
       <label for="customer_name">{{ tr("full_name") }}</label>
       <input id="customer_name" name="customer_name" placeholder="{{ tr('full_name_placeholder') }}" required />
       <label for="house_number">{{ tr("house_number") }}</label>
@@ -163,7 +164,7 @@
       setStatus('{{ tr("creating_paypal_order") }}', false);
       createOrderRequest = fetch("{{ url_for('create_paypal_order') }}", {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '{{ csrf_token() }}' },
         body: JSON.stringify(payload)
       })
         .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
@@ -208,7 +209,7 @@
       setStatus('{{ tr("validating_payment") }}', false);
       return fetch("{{ url_for('capture_paypal_order') }}", {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': '{{ csrf_token() }}' },
         body: JSON.stringify({
           paypal_order_id: paypalOrderId,
           local_order_id: localOrderId

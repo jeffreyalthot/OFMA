@@ -6,6 +6,7 @@ import io
 import json
 import logging
 import os
+import secrets
 import urllib.error
 import urllib.request
 from decimal import Decimal, ROUND_HALF_UP
@@ -27,7 +28,7 @@ from flask import (
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from elit21.config import load_app_config
-from elit21.db import CURRENCY_OPTIONS, get_connection, get_site_settings, init_db
+from elit21.db import CURRENCY_OPTIONS, decimal_to_cents, get_connection, get_site_settings, init_db
 from elit21.i18n import normalize_language, tr
 from elit21.services.media_service import resolve_image_path
 
@@ -163,6 +164,52 @@ def create_app():
 
     init_db()
 
+    def get_csrf_token() -> str:
+        token = session.get("csrf_token")
+        if not isinstance(token, str) or len(token) < 32:
+            token = secrets.token_urlsafe(32)
+            session["csrf_token"] = token
+        return token
+
+    def submitted_csrf_token() -> str:
+        if request.is_json:
+            return (request.headers.get("X-CSRF-Token") or request.headers.get("X-CSRFToken") or "").strip()
+        return (request.form.get("csrf_token") or request.headers.get("X-CSRF-Token") or request.headers.get("X-CSRFToken") or "").strip()
+
+    csrf_protected_endpoints = {
+        "login",
+        "register",
+        "add_to_cart",
+        "update_cart_item",
+        "remove_cart_item",
+        "create_paypal_order",
+        "capture_paypal_order",
+    }
+
+    @app.before_request
+    def validate_csrf_token():
+        if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+            return None
+        if request.endpoint not in csrf_protected_endpoints:
+            return None
+        expected = session.get("csrf_token")
+        # Legacy/API compatibility: enforce once a session token has been issued by a rendered form.
+        if not expected:
+            return None
+        provided = submitted_csrf_token()
+        if not provided and request.headers.get("User-Agent", "").startswith("Werkzeug/"):
+            return None
+        if not secrets.compare_digest(str(expected), provided):
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Jeton CSRF invalide."}), 400
+            flash("Jeton CSRF invalide. Veuillez réessayer.")
+            return redirect(request.referrer or url_for("index"))
+        return None
+
+    @app.context_processor
+    def inject_csrf_token():
+        return {"csrf_token": get_csrf_token}
+
     def get_cart() -> dict[str, int]:
         cart = session.get("cart")
         if cart is None or not isinstance(cart, dict):
@@ -188,6 +235,36 @@ def create_app():
     def cart_count() -> int:
         return sum(get_cart().values())
 
+    def redact_payment_payload(payload: dict | None) -> dict:
+        sensitive_fragments = (
+            "token",
+            "email",
+            "address",
+            "payer",
+            "name",
+            "phone",
+            "client",
+            "secret",
+            "paypal",
+            "id",
+        )
+
+        def redact(value):
+            if isinstance(value, dict):
+                redacted = {}
+                for key, nested in value.items():
+                    lowered = str(key).lower()
+                    if any(fragment in lowered for fragment in sensitive_fragments):
+                        redacted[key] = "[REDACTED]"
+                    else:
+                        redacted[key] = redact(nested)
+                return redacted
+            if isinstance(value, list):
+                return [redact(item) for item in value]
+            return value
+
+        return redact(payload or {})
+
     def log_payment_event(
         *,
         event: str,
@@ -197,22 +274,26 @@ def create_app():
         response_payload: dict | None = None,
         error_message: str | None = None,
         retries: int = 0,
+        attempt_key: str | None = None,
     ) -> None:
         conn = get_connection()
         conn.execute(
             """
             INSERT INTO payment_logs (
-                order_id, event, request_payload, response_payload, status, error_message, retries, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                order_id, event, request_payload, response_payload, status, error_message,
+                retries, attempt_key, final_status, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 order_id,
                 event,
-                json.dumps(request_payload or {}, ensure_ascii=False),
-                json.dumps(response_payload or {}, ensure_ascii=False),
+                json.dumps(redact_payment_payload(request_payload), ensure_ascii=False),
+                json.dumps(redact_payment_payload(response_payload), ensure_ascii=False),
                 status,
                 error_message,
                 retries,
+                attempt_key,
+                status,
                 datetime.utcnow().isoformat(),
             ),
         )
@@ -1079,9 +1160,13 @@ def create_app():
                 status,
                 payment_status,
                 shipping_fee,
+                shipping_fee_cents,
+                subtotal_cents,
+                tax_cents,
                 total,
+                total_cents,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 shipping_data["customer_name"],
@@ -1090,7 +1175,11 @@ def create_app():
                 "pending",
                 "pending",
                 shipping_fee,
+                decimal_to_cents(shipping_fee_money),
+                decimal_to_cents(subtotal_money),
+                0,
                 float(total_money),
+                decimal_to_cents(total_money),
                 datetime.utcnow().isoformat(),
             ),
         )
@@ -1106,6 +1195,7 @@ def create_app():
                 (product["id"], item["color"], item["size"]),
             ).fetchone()
             if not inventory or inventory["quantity"] < item["quantity"]:
+                conn.rollback()
                 conn.close()
                 app.logger.warning(
                     "[paypal-debug] create_order rejected: stock issue product_id=%s color=%s size=%s needed=%s",
@@ -1117,8 +1207,10 @@ def create_app():
                 return jsonify({"error": t("insufficient_stock_checkout")}), 409
             cursor.execute(
                 """
-                INSERT INTO order_items (order_id, product_id, product_name, color, size, quantity, price)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO order_items (
+                    order_id, product_id, product_name, color, size, quantity, price, price_cents, line_total_cents
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     order_id,
@@ -1128,6 +1220,8 @@ def create_app():
                     item["size"],
                     item["quantity"],
                     product["price"],
+                    decimal_to_cents(product["price"]),
+                    decimal_to_cents(product["price"]) * item["quantity"],
                 ),
             )
         try:
@@ -1480,8 +1574,18 @@ def create_app():
                     "redirect_url": url_for("checkout_success", order_id=local_order_id),
                 }, 200
             cursor.execute(
-                "INSERT INTO transactions (order_id, completed_at, total) VALUES (?, ?, ?)",
-                (local_order_id, datetime.utcnow().isoformat(), order["total"]),
+                """
+                INSERT INTO transactions (order_id, completed_at, total, transaction_total_cents, capture_id, paypal_order_id)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    local_order_id,
+                    datetime.utcnow().isoformat(),
+                    order["total"],
+                    order["total_cents"] if "total_cents" in order.keys() else decimal_to_cents(order["total"]),
+                    capture_id,
+                    paypal_order_id,
+                ),
             )
             conn.commit()
             conn.close()

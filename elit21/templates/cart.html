@@ -16,11 +16,13 @@
           </div>
           <div class="cart-actions">
             <form method="post" action="{{ url_for('update_cart_item') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
               <input type="hidden" name="cart_key" value="{{ item.cart_key }}" />
               <input type="number" min="1" name="quantity" value="{{ item.quantity }}" />
               <button type="submit">{{ tr("cart_update") }}</button>
             </form>
             <form method="post" action="{{ url_for('remove_cart_item') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
               <input type="hidden" name="cart_key" value="{{ item.cart_key }}" />
               <button class="text-button" type="submit">{{ tr("cart_remove") }}</button>
             </form>
