@@ -1,4 +1,5 @@
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent / "elit21.db"
@@ -68,6 +69,33 @@ for page_key in PAGE_CUSTOMIZATION_KEYS:
     DEFAULT_SITE_SETTINGS[f"{page_key}_section_button_text_color"] = "#ffffff"
 
 
+def table_columns(cursor: sqlite3.Cursor, table_name: str) -> set[str]:
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    return {row[1] for row in cursor.fetchall()}
+
+
+def add_column_if_missing(
+    cursor: sqlite3.Cursor,
+    table_name: str,
+    column_name: str,
+    column_definition: str,
+) -> None:
+    if column_name not in table_columns(cursor, table_name):
+        cursor.execute(
+            f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}"
+        )
+
+
+def record_schema_migration(cursor: sqlite3.Cursor, version: str, description: str) -> None:
+    cursor.execute(
+        """
+        INSERT OR IGNORE INTO schema_migrations (version, description, applied_at)
+        VALUES (?, ?, ?)
+        """,
+        (version, description, datetime.utcnow().isoformat()),
+    )
+
+
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -78,6 +106,17 @@ def get_connection():
 def init_db():
     conn = get_connection()
     cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version TEXT PRIMARY KEY,
+            description TEXT NOT NULL,
+            applied_at TEXT NOT NULL
+        )
+        """
+    )
+    record_schema_migration(cursor, "0001", "Baseline schema with ad hoc compatibility migrations")
 
     cursor.execute(
         """
@@ -176,12 +215,14 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             description TEXT NOT NULL,
-            price REAL NOT NULL,
-            status TEXT NOT NULL,
-            stock INTEGER NOT NULL,
+            price REAL NOT NULL CHECK (price >= 0),
+            status TEXT NOT NULL CHECK (status IN ('pending', 'active', 'inactive', 'archived')),
+            stock INTEGER NOT NULL CHECK (stock >= 0),
             color TEXT,
             size TEXT,
             category TEXT,
+            archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
+            deleted_at TEXT,
             created_at TEXT NOT NULL
         )
         """
@@ -216,23 +257,25 @@ def init_db():
             customer_address TEXT NOT NULL,
             status TEXT NOT NULL,
             payment_status TEXT NOT NULL,
-            shipping_fee REAL NOT NULL DEFAULT 0,
-            total REAL NOT NULL,
+            paypal_order_id TEXT UNIQUE,
+            capture_id TEXT UNIQUE,
+            shipping_fee REAL NOT NULL DEFAULT 0 CHECK (shipping_fee >= 0),
+            total REAL NOT NULL CHECK (total >= 0),
             created_at TEXT NOT NULL
         )
         """
     )
 
-    cursor.execute("PRAGMA table_info(orders)")
-    columns = {row[1] for row in cursor.fetchall()}
-    if "shipping_fee" not in columns:
-        cursor.execute("ALTER TABLE orders ADD COLUMN shipping_fee REAL NOT NULL DEFAULT 0")
+    add_column_if_missing(cursor, "orders", "shipping_fee", "REAL NOT NULL DEFAULT 0")
+    add_column_if_missing(cursor, "orders", "paypal_order_id", "TEXT")
+    add_column_if_missing(cursor, "orders", "capture_id", "TEXT")
+    record_schema_migration(cursor, "0002", "Add PayPal idempotency columns to orders")
 
-    cursor.execute("PRAGMA table_info(products)")
-    product_columns = {row[1] for row in cursor.fetchall()}
     for column_name in ("color", "size", "category"):
-        if column_name not in product_columns:
-            cursor.execute(f"ALTER TABLE products ADD COLUMN {column_name} TEXT")
+        add_column_if_missing(cursor, "products", column_name, "TEXT")
+    add_column_if_missing(cursor, "products", "archived", "INTEGER NOT NULL DEFAULT 0")
+    add_column_if_missing(cursor, "products", "deleted_at", "TEXT")
+    record_schema_migration(cursor, "0003", "Add product archival fields")
 
     cursor.execute(
         """
@@ -243,8 +286,8 @@ def init_db():
             product_name TEXT NOT NULL,
             color TEXT,
             size TEXT,
-            quantity INTEGER NOT NULL,
-            price REAL NOT NULL,
+            quantity INTEGER NOT NULL CHECK (quantity > 0),
+            price REAL NOT NULL CHECK (price >= 0),
             FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE
         )
         """
@@ -257,7 +300,7 @@ def init_db():
             product_id INTEGER NOT NULL,
             color TEXT NOT NULL,
             size TEXT NOT NULL,
-            quantity INTEGER NOT NULL,
+            quantity INTEGER NOT NULL CHECK (quantity >= 0),
             UNIQUE(product_id, color, size),
             FOREIGN KEY(product_id) REFERENCES products(id) ON DELETE CASCADE
         )
@@ -270,7 +313,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             order_id INTEGER NOT NULL,
             completed_at TEXT NOT NULL,
-            total REAL NOT NULL,
+            total REAL NOT NULL CHECK (total >= 0),
             FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE
         )
         """
@@ -293,11 +336,24 @@ def init_db():
         """
     )
 
-    cursor.execute("PRAGMA table_info(order_items)")
-    order_item_columns = {row[1] for row in cursor.fetchall()}
     for column_name in ("color", "size"):
-        if column_name not in order_item_columns:
-            cursor.execute(f"ALTER TABLE order_items ADD COLUMN {column_name} TEXT")
+        add_column_if_missing(cursor, "order_items", column_name, "TEXT")
+
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_status ON products(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_category ON products(category)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_products_created_at ON products(created_at)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_product_inventory_lookup "
+        "ON product_inventory(product_id, color, size)"
+    )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_customer_email ON orders(customer_email)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_orders_payment_status ON orders(payment_status)")
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_paypal_order_id ON orders(paypal_order_id) WHERE paypal_order_id IS NOT NULL")
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_capture_id ON orders(capture_id) WHERE capture_id IS NOT NULL")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_transactions_order_id ON transactions(order_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_payment_logs_order_event ON payment_logs(order_id, event)")
+    record_schema_migration(cursor, "0004", "Add storefront lookup and payment indexes")
 
     conn.commit()
     conn.close()
